@@ -6,3 +6,4 @@ const PERSONSUMMARY = "summary"
 const PERSONCONNECTION = "connection"
 const PERSONDIRECTORY = "directory"
 const PERSONHELLO = "hello"
+const PERSONCANCEL = "cancel" // Cancel Download
