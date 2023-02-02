@@ -19,7 +19,6 @@ import (
 
 	"github.com/IceWhaleTech/CasaOS/pkg/cache"
 	"github.com/IceWhaleTech/CasaOS/pkg/config"
-	"github.com/IceWhaleTech/CasaOS/pkg/config/configfile"
 	"github.com/IceWhaleTech/CasaOS/pkg/sqlite"
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/command"
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/file"
@@ -79,22 +78,7 @@ func init() {
 
 	service.GetCPUThermalZone()
 	service.MyService.Storages().InitStorages()
-
 	route.InitFunction()
-	data := &configfile.Storage{}
-	e := data.Load()
-	fmt.Println(e)
-	fmt.Println(data.GetSectionList())
-	// fmt.Println(data.HasSection("google"))
-	// fmt.Println(data.GetKeyList("google"))
-	// fmt.Println(data.GetValue("google", "token"))
-	// data.SetValue("google", "type", "drive")
-	// data.SetValue("google", "client_id", "***REMOVED***")
-	// data.SetValue("google", "client_secret", "***REMOVED***")
-	// data.SetValue("google", "scope", "drive")
-	// data.SetValue("google", "token", `{"access_token":"***REMOVED***","token_type":"Bearer","refresh_token":"***REMOVED***","expiry":"2023-01-28T19:26:50.198064816+08:00"}`)
-	//e = data.Save()
-	//fmt.Println(e)
 }
 
 // @title casaOS API
