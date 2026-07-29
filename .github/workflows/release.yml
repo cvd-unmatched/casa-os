@@ -53,7 +53,7 @@ jobs:
           GOOS: linux
           GOARCH: ${{ matrix.arch }}
         run: |
-          go build -ldflags "-s -w -X main.commit=${{ github.sha }}" -o casa main.go
+          go build -ldflags "-s -w -X main.commit=${{ github.sha }} -X github.com/IceWhaleTech/CasaOS/common.ForkVersion=${{ github.ref_name }}" -o casa main.go
       - uses: actions/upload-artifact@v4
         with:
           name: casa-linux-${{ matrix.arch }}

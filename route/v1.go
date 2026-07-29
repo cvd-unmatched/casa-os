@@ -69,6 +69,7 @@ func InitV1Router() http.Handler {
 
 			v1SysGroup.POST("/update", v1.SystemUpdate)
 			v1SysGroup.POST("/update-fork", v1.PostUpdateFromRepo)
+			v1SysGroup.GET("/update-fork/check", v1.GetForkUpdateCheck)
 
 			v1SysGroup.GET("/hardware", v1.GetSystemHardwareInfo) // hardware/info
 			v1SysGroup.GET("/disks-usage", v1.GetAllDisksUsage)
