@@ -934,7 +934,7 @@ export default {
             />
             <p class="control">
               <input ref="iconFileInput" type="file" accept="image/*" class="is-hidden" @change="onIconFileSelected">
-              <b-button icon-left="upload-outline" icon-pack="casa" :loading="isUploadingIcon" @click="$refs.iconFileInput.click()">
+              <b-button class="icon-upload-btn" icon-left="upload-outline" icon-pack="casa" :loading="isUploadingIcon" @click="$refs.iconFileInput.click()">
                 {{ $t('Upload') }}
               </b-button>
             </p>
@@ -1065,6 +1065,10 @@ export default {
     overflow-x: hidden;
 
     .container-icon {
+      height: 2.5rem;
+    }
+
+    .icon-upload-btn {
       height: 2.5rem;
     }
   }

@@ -566,7 +566,15 @@ func (s *systemService) UpdateSystemVersion(version string) {
 // stops this very process partway through - the HTTP handler must return before that
 // happens, and the frontend polls for the service coming back afterwards.
 func (s *systemService) UpdateFromRepo() {
-	go command.OnlyExec("curl -fsSL https://raw.githubusercontent.com/cvd-unmatched/casa-os/main/update.sh | bash")
+	// update.sh itself runs `systemctl stop casaos` partway through. Spawned
+	// as a plain child of this process, that would kill update.sh along
+	// with it - systemd's default KillMode=control-group tears down the
+	// *entire* cgroup of a stopped service, including any child process
+	// still running inside it, regardless of process-group/session
+	// detachment. Running it via `systemd-run` gives it its own independent
+	// transient unit/cgroup, so stopping casaos doesn't take the updater
+	// down with it.
+	go command.OnlyExec("systemd-run --unit=casaos-fork-update --collect /bin/bash -c 'curl -fsSL https://raw.githubusercontent.com/cvd-unmatched/casa-os/main/update.sh | bash'")
 }
 
 // CheckForkUpdate compares the release tag this binary was built from
