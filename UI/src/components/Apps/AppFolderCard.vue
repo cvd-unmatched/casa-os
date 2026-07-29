@@ -11,6 +11,17 @@ export default {
       default: () => [],
     },
   },
+  computed: {
+    previewStyle() {
+      if (!this.folder.color)
+        return {}
+      const hex = this.folder.color.replace('#', '')
+      const r = parseInt(hex.substring(0, 2), 16)
+      const g = parseInt(hex.substring(2, 4), 16)
+      const b = parseInt(hex.substring(4, 6), 16)
+      return { background: `rgba(${r}, ${g}, ${b}, 0.2)` }
+    },
+  },
   methods: {
     open() {
       this.$emit('open', this.folder)
@@ -27,7 +38,7 @@ export default {
     <div class="blur-background" />
     <div class="cards-content">
       <div class="has-text-centered is-flex is-justify-content-center is-flex-direction-column pt-5 pb-3px img-c">
-        <div class="folder-preview is-64x64">
+        <div class="folder-preview is-64x64" :style="previewStyle">
           <div v-for="n in 4" :key="n" class="folder-preview-slot">
             <img v-if="previewApps[n - 1]" :src="previewApps[n - 1].icon" alt="">
           </div>
