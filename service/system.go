@@ -54,6 +54,7 @@ type SystemService interface {
 	GetDirPathOne(path string) (m model.Path)
 	GetNetState(name string) string
 	GetDiskInfo() *disk.UsageStat
+	GetAllDisksUsage() []DiskUsageInfo
 	GetSysInfo() host.InfoStat
 	GetDeviceTree() string
 	GetDeviceInfo() model.DeviceInfo
@@ -259,6 +260,64 @@ func (c *systemService) GetDiskInfo() *disk.UsageStat {
 	diskInfo.UsedPercent, _ = strconv.ParseFloat(fmt.Sprintf("%.1f", diskInfo.UsedPercent), 64)
 	diskInfo.InodesUsedPercent, _ = strconv.ParseFloat(fmt.Sprintf("%.1f", diskInfo.InodesUsedPercent), 64)
 	return diskInfo
+}
+
+type DiskUsageInfo struct {
+	Device      string  `json:"device"`
+	Mountpoint  string  `json:"mountpoint"`
+	Fstype      string  `json:"fstype"`
+	Total       uint64  `json:"total"`
+	Used        uint64  `json:"used"`
+	Free        uint64  `json:"free"`
+	UsedPercent float64 `json:"usedPercent"`
+}
+
+// pseudoFstypes are virtual/in-memory filesystems that show up in `mount`
+// output but aren't real storage - not useful in a disk-usage widget.
+var pseudoFstypes = map[string]bool{
+	"tmpfs": true, "devtmpfs": true, "proc": true, "sysfs": true,
+	"cgroup": true, "cgroup2": true, "overlay": true, "squashfs": true,
+	"efivarfs": true, "devpts": true, "securityfs": true, "pstore": true,
+	"debugfs": true, "tracefs": true, "mqueue": true, "hugetlbfs": true,
+	"configfs": true, "fusectl": true, "bpf": true, "autofs": true,
+	"binfmt_misc": true, "rpc_pipefs": true, "nsfs": true,
+}
+
+// GetAllDisksUsage lists every real mounted filesystem with its usage, i.e.
+// the equivalent of `df -h` (unlike GetDiskInfo, which is scoped to just the
+// root filesystem).
+func (c *systemService) GetAllDisksUsage() []DiskUsageInfo {
+	result := []DiskUsageInfo{}
+
+	partitions, err := disk.Partitions(false)
+	if err != nil {
+		return result
+	}
+
+	seen := map[string]bool{}
+	for _, p := range partitions {
+		if pseudoFstypes[p.Fstype] || seen[p.Mountpoint] {
+			continue
+		}
+		seen[p.Mountpoint] = true
+
+		usage, err := disk.Usage(p.Mountpoint)
+		if err != nil || usage.Total == 0 {
+			continue
+		}
+
+		result = append(result, DiskUsageInfo{
+			Device:      p.Device,
+			Mountpoint:  p.Mountpoint,
+			Fstype:      p.Fstype,
+			Total:       usage.Total,
+			Used:        usage.Used,
+			Free:        usage.Free,
+			UsedPercent: usage.UsedPercent,
+		})
+	}
+
+	return result
 }
 
 func (c *systemService) GetNetState(name string) string {

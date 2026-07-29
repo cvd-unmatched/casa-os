@@ -71,6 +71,7 @@ func InitV1Router() http.Handler {
 			v1SysGroup.POST("/update-fork", v1.PostUpdateFromRepo)
 
 			v1SysGroup.GET("/hardware", v1.GetSystemHardwareInfo) // hardware/info
+			v1SysGroup.GET("/disks-usage", v1.GetAllDisksUsage)
 
 			v1SysGroup.GET("/wsssh", v1.WsSsh)
 			v1SysGroup.POST("/ssh-login", v1.PostSshLogin)

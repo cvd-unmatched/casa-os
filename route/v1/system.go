@@ -82,6 +82,17 @@ func PostUpdateFromRepo(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
 }
 
+// @Summary usage for every real mounted filesystem (like `df -h`), not just the root disk
+// @Produce  application/json
+// @Accept application/json
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/disks-usage [get]
+func GetAllDisksUsage(ctx echo.Context) error {
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: service.MyService.System().GetAllDisksUsage()})
+}
+
 // @Summary  get logs
 // @Produce  application/json
 // @Accept application/json
