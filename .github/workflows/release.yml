@@ -1,25 +1,87 @@
-name: goreleaser
+name: Build and release fork
+
+# The original release.yml called IceWhaleTech's private reusable workflow
+# (needs their OAuth secrets and only publishes to IceWhaleTech/CasaOS).
+# This is a self-contained replacement: push a tag like v1.0.0 and it builds
+# the backend for linux/amd64 + linux/arm64, builds the UI once, packages
+# each architecture as a tarball, and attaches them to a GitHub Release on
+# this repo. update.sh (repo root) is what a server pulls these down with.
 
 on:
   push:
     tags:
-      - v*.*.*
+      - "v*.*.*"
 
 permissions:
   contents: write
+
 jobs:
-  call-workflow-passing-data:
-    uses: IceWhaleTech/github/.github/workflows/go_release.yml@main
-    with:
-      project-name: CasaOS
-      file-name: casaos
-    secrets:
-      GoogleID: ${{ secrets.GoogleID }} 
-      GoogleSecret: ${{ secrets.GoogleSecret }}
-      DropboxKey: ${{ secrets.DropboxKey }}
-      DropboxSecret: ${{ secrets.DropboxSecret }}
-      OneDriveID: ${{ secrets.OneDriveID }}
-      OneDriveSecret: ${{ secrets.OneDriveSecret }}
-      OneDrivePublic: ${{ secrets.OneDrivePublic }}
-      OSS_KEY_ID: ${{ secrets.OSS_KEY_ID }}
-      OSS_KEY_SECRET: ${{ secrets.OSS_KEY_SECRET }}
+  build-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: UI/pnpm-lock.yaml
+      - run: pnpm install
+        working-directory: UI
+      - run: pnpm run build
+        working-directory: UI
+      - uses: actions/upload-artifact@v4
+        with:
+          name: www
+          path: UI/build/sysroot/var/lib/casaos/www
+
+  build-backend:
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go generate ./...
+      - env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          go build -ldflags "-s -w -X main.commit=${{ github.sha }}" -o casa main.go
+      - uses: actions/upload-artifact@v4
+        with:
+          name: casa-linux-${{ matrix.arch }}
+          path: casa
+
+  package-and-release:
+    needs: [build-ui, build-backend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Package tarballs
+        run: |
+          set -e
+          for arch in amd64 arm64; do
+            dir="package-$arch"
+            mkdir -p "$dir/www"
+            cp "artifacts/casa-linux-$arch/casa" "$dir/casa"
+            chmod +x "$dir/casa"
+            cp -r artifacts/www/. "$dir/www/"
+            tar -czf "casaos-linux-$arch.tar.gz" -C "$dir" casa www
+          done
+          sha256sum casaos-linux-*.tar.gz > checksums.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            casaos-linux-amd64.tar.gz
+            casaos-linux-arm64.tar.gz
+            checksums.txt
+          generate_release_notes: true
