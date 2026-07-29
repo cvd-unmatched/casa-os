@@ -29,8 +29,6 @@ func InitV1Router() http.Handler {
 	e.Use(echo_middleware.Recover())
 	e.Use(echo_middleware.Logger())
 
-	e.GET("/v1/sys/debug", v1.GetSystemConfigDebug) // //debug
-
 	e.GET("/v1/sys/version/check", v1.GetSystemCheckVersion)
 	e.GET("/v1/sys/version/current", func(ctx echo.Context) error {
 		return ctx.String(200, common.VERSION)
@@ -42,9 +40,7 @@ func InitV1Router() http.Handler {
 	v1Group := e.Group("/v1")
 	//	e.Any("/v1/test", v1.CheckNetwork)
 	v1Group.Use(echo_middleware.JWTWithConfig(echo_middleware.JWTConfig{
-		Skipper: func(c echo.Context) bool {
-			return c.RealIP() == "::1" || c.RealIP() == "127.0.0.1"
-		},
+		Skipper: isLoopbackRequest,
 		ParseTokenFunc: func(token string, c echo.Context) (interface{}, error) {
 			valid, claims, err := jwt.Validate(token, func() (*ecdsa.PublicKey, error) { return external.GetPublicKey(config.CommonInfo.RuntimePath) })
 			if err != nil || !valid {
@@ -80,6 +76,7 @@ func InitV1Router() http.Handler {
 			// v1SysGroup.GET("/config", v1.GetSystemConfig) //delete
 			// v1SysGroup.POST("/config", v1.PostSetSystemConfig)
 			v1SysGroup.GET("/logs", v1.GetCasaOSErrorLogs) // error/logs
+			v1SysGroup.GET("/debug", v1.GetSystemConfigDebug)
 			// v1SysGroup.GET("/widget/config", v1.GetWidgetConfig)//delete
 			// v1SysGroup.POST("/widget/config", v1.PostSetWidgetConfig)//delete
 
