@@ -36,6 +36,7 @@ import (
 
 type SystemService interface {
 	UpdateSystemVersion(version string)
+	UpdateFromRepo()
 	GetSystemConfigDebug() []string
 	GetCasaOSLogs(lineNumber int) string
 	UpdateAssist()
@@ -387,6 +388,15 @@ func (s *systemService) UpdateSystemVersion(version string) {
 
 	// s.log.Error(config.AppInfo.ProjectPath + "/shell/tool.sh -r " + version)
 	// s.log.Error(command2.ExecResultStr(config.AppInfo.ProjectPath + "/shell/tool.sh -r " + version))
+}
+
+// UpdateFromRepo pulls the latest release of this fork (github.com/cvd-unmatched/casa-os)
+// and swaps it in, via the repo's own update.sh (same script documented in FORK.md for
+// manual use). Runs detached, same as UpdateSystemVersion above, since the update script
+// stops this very process partway through - the HTTP handler must return before that
+// happens, and the frontend polls for the service coming back afterwards.
+func (s *systemService) UpdateFromRepo() {
+	go command.OnlyExec("curl -fsSL https://raw.githubusercontent.com/cvd-unmatched/casa-os/main/update.sh | bash")
 }
 
 func (s *systemService) UpdateAssist() {

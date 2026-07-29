@@ -448,6 +448,48 @@ export default {
       this.restart = 'Restart'
       this.shutdown = 'Shutdown'
     },
+
+    /**
+     * @description: Pull the latest release from this fork's own repo and swap it in.
+     * Reuses the same "wait for the service to come back, then reload" overlay
+     * and polling as power(), since an update.sh run stops and restarts the
+     * casaos service the same way a system restart does.
+     * @return {*} void
+     */
+    updateFromRepo() {
+      this.$buefy.dialog.confirm({
+        title: this.$t('Update from repository'),
+        message: this.$t('This downloads the latest release from your own repository, backs up the current install, and restarts CasaOS. It can take a minute or two.'),
+        type: 'is-dark',
+        confirmText: this.$t('Update now'),
+        cancelText: this.$t('Cancel'),
+        onConfirm: () => {
+          this.$messageBus('dashboardsetting_updatefromrepo')
+          this.$refs.settingsDrop.toggle()
+          this.showPower = true
+          this.showPowerTitle = 'Updating from repository'
+          this.showPowerMessage = 'Downloading and installing the latest release. This can take a minute or two.'
+          this.$api.sys.updateFromRepo().then(() => {
+            const timer = setInterval(() => {
+              this.$api.users.getUserStatus().then((res) => {
+                if (res.data.data.initialized) {
+                  clearInterval(timer)
+                  location.reload()
+                }
+              }).catch(() => {
+                // still restarting - keep polling
+              })
+            }, 10000)
+          }).catch(() => {
+            this.showPower = false
+            this.$buefy.toast.open({
+              message: this.$t('Failed to start the update. Check the dashboard is reachable and try again.'),
+              type: 'is-danger',
+            })
+          })
+        },
+      })
+    },
   },
 }
 </script>
@@ -762,6 +804,21 @@ export default {
             </div>
           </div>
           <!-- Update End -->
+
+          <!-- Update from fork repo Start -->
+          <div class="_is-large hover-effect _is-radius pr-2 mr-4 ml-4">
+            <div class="is-flex is-align-items-center">
+              <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+                <b-icon class="mr-1 ml-2" icon="update-outline" pack="casa" size="is-20" />
+                {{ $t("Update from repository") }}
+              </div>
+              <b-button class="ml-2" rounded size="is-small" type="is-dark" @click="updateFromRepo">
+                {{ $t("Update") }}
+              </b-button>
+            </div>
+          </div>
+          <!-- Update from fork repo End -->
+
           <!-- Restart or Shutdown Start -->
           <div
             class="is-flex is-align-content-center is-justify-content-center _footer mt-4 pl-3 pr-3 pt-2 pb-2"
