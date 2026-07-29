@@ -104,12 +104,16 @@ const sys = {
 		return api.get(`${PREFIX}/update-fork/check`);
 	},
 
-	// upload a custom app icon to the configured icon storage disk
-	// (no explicit Content-Type here - axios auto-detects FormData and sets
-	// the header itself, including the required boundary; overriding it
-	// manually strips the boundary and the backend can't parse the body)
+	// upload a custom app icon to the configured icon storage disk.
+	// The axios instance (service.js) sets a hard default
+	// Content-Type: application/json on every request, which a FormData
+	// body doesn't automatically override - explicitly clearing it here
+	// (not setting it to a string) is what lets the browser generate the
+	// correct multipart/form-data header with its boundary itself.
 	uploadCustomIcon(formData) {
-		return api.post(`${PREFIX}/custom-icon`, formData);
+		return api.post(`${PREFIX}/custom-icon`, formData, {
+			headers: { 'Content-Type': undefined },
+		});
 	},
 
 	// stop casaos
