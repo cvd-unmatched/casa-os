@@ -157,6 +157,8 @@ const orderConfig = 'app_order'
 const groupsConfig = 'app_groups'
 const displayOrderConfig = 'app_display_order'
 
+const FOLDER_COLORS = ['#5B8DEF', '#61C454', '#F2994A', '#EB5757', '#9B51E0', '#2D9CDB', '#F2C94C', '#56CCF2']
+
 export default {
 	mixins: [business_ShowNewAppTag, business_LinkApp],
 	data () {
@@ -192,8 +194,10 @@ export default {
 			openAppStore: this.showInstall,
 			getFolders: () => this.groups,
 			getAppList: () => this.appList,
+			getFolderColors: () => FOLDER_COLORS,
 			createFolder: this.createFolder,
 			renameFolder: this.renameFolder,
+			changeFolderColor: this.changeFolderColor,
 			deleteFolder: this.deleteFolder,
 			moveAppToFolder: this.moveAppToFolder,
 			removeAppFromFolder: this.removeAppFromFolder
@@ -427,7 +431,8 @@ export default {
 				__folder: true,
 				id: group.id,
 				name: group.name,
-				appNames: group.appNames
+				appNames: group.appNames,
+				color: group.color
 			}))
 
 			const keyOf = item => (item.__folder ? `folder:${item.id}` : item.name)
@@ -481,7 +486,7 @@ export default {
 
 		createFolder (name, appName) {
 			const id = nanoid()
-			this.groups.push({ id, name, appNames: appName ? [appName] : [] })
+			this.groups.push({ id, name, appNames: appName ? [appName] : [], color: null })
 			this.saveGroups()
 			this.rebuildDisplayList()
 			return id
@@ -491,6 +496,14 @@ export default {
 			const group = this.groups.find(g => g.id === id)
 			if (!group) return
 			group.name = name
+			this.saveGroups()
+			this.rebuildDisplayList()
+		},
+
+		changeFolderColor (id, color) {
+			const group = this.groups.find(g => g.id === id)
+			if (!group) return
+			group.color = color
 			this.saveGroups()
 			this.rebuildDisplayList()
 		},

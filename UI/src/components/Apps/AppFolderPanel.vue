@@ -6,7 +6,7 @@ export default {
   components: {
     AppCard,
   },
-  inject: ['getFolders', 'getAppList', 'renameFolder', 'deleteFolder'],
+  inject: ['getFolders', 'getAppList', 'getFolderColors', 'renameFolder', 'changeFolderColor', 'deleteFolder'],
   props: {
     folderId: {
       type: String,
@@ -16,6 +16,9 @@ export default {
   computed: {
     folder() {
       return this.getFolders().find(g => g.id === this.folderId)
+    },
+    folderColors() {
+      return this.getFolderColors()
     },
     apps() {
       if (!this.folder)
@@ -69,6 +72,9 @@ export default {
     onUpdateState() {
       this.$emit('updateState')
     },
+    pickColor(color) {
+      this.changeFolderColor(this.folderId, color)
+    },
   },
 }
 </script>
@@ -83,6 +89,19 @@ export default {
       <b-icon class="is-clickable mr-4" icon="trash-outline" pack="casa" @click.native="confirmDelete" />
       <b-icon class="is-clickable" icon="close-outline" pack="casa" @click.native="$emit('close')" />
     </header>
+    <div class="color-picker is-flex is-align-items-center px-5 pt-4">
+      <span class="mr-3 has-text-grey is-size-7">{{ $t('Color') }}</span>
+      <span
+        class="color-swatch mr-2" :class="{ selected: !folder.color }"
+        style="background: rgba(144, 149, 153, 0.4)"
+        @click="pickColor(null)"
+      />
+      <span
+        v-for="color in folderColors" :key="color" class="color-swatch mr-2"
+        :class="{ selected: folder.color === color }" :style="{ background: color }"
+        @click="pickColor(color)"
+      />
+    </div>
     <section class="modal-card-body">
       <div v-if="apps.length === 0" class="has-text-centered has-text-grey py-6">
         {{ $t('This folder is empty. Move apps into it from their menu.') }}
@@ -104,6 +123,21 @@ export default {
 
 <style lang="scss" scoped>
 .app-folder-panel {
+  .color-swatch {
+    display: inline-block;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    cursor: pointer;
+    box-sizing: border-box;
+    border: 2px solid transparent;
+    transition: border-color 0.15s;
+
+    &.selected {
+      border-color: hsla(208, 20%, 20%, 1);
+    }
+  }
+
   .modal-card-body {
     min-height: 12rem;
   }
