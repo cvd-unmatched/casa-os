@@ -34,6 +34,11 @@ const sys = {
 		return api.get(`${PREFIX}/disk`);
 	},
 
+	// usage for every mounted filesystem (like `df -h`)
+	getAllDisksUsage() {
+		return api.get(`${PREFIX}/disks-usage`);
+	},
+
 	// get memory info
 	getMemoryInfo() {
 		return api.get(`${PREFIX}/mem`);
