@@ -33,14 +33,20 @@ if [[ ! -d "$WWW_PATH" ]]; then
   exit 1
 fi
 
-BACKUP_MOUNT="$(dirname "$BACKUP_ROOT")"
-while [[ "$BACKUP_MOUNT" != "/" && ! -d "$BACKUP_MOUNT" ]]; do
-  BACKUP_MOUNT="$(dirname "$BACKUP_MOUNT")"
-done
-if ! mountpoint -q "$BACKUP_MOUNT" 2>/dev/null && [[ "$BACKUP_MOUNT" != "/" ]]; then
-  echo "$BACKUP_MOUNT doesn't look like a mounted filesystem right now." >&2
-  echo "Refusing to back up there - it would silently land on the root disk instead. Check your mount (df -h) and re-run." >&2
-  exit 1
+# Only enforce "must be a real separate mount" for paths under /mnt/ - that's
+# the one convention where writing there while it's unmounted would silently
+# land backups on the root disk instead of the intended bulk-storage disk.
+# A custom BACKUP_ROOT elsewhere (e.g. /root/casaos-backups) is trusted as-is.
+if [[ "$BACKUP_ROOT" == /mnt/* ]]; then
+  BACKUP_MOUNT="$(dirname "$BACKUP_ROOT")"
+  while [[ "$BACKUP_MOUNT" != "/" && ! -d "$BACKUP_MOUNT" ]]; do
+    BACKUP_MOUNT="$(dirname "$BACKUP_MOUNT")"
+  done
+  if ! mountpoint -q "$BACKUP_MOUNT" 2>/dev/null; then
+    echo "$BACKUP_MOUNT doesn't look like a mounted filesystem right now." >&2
+    echo "Refusing to back up under /mnt/... - it would silently land on the root disk instead. Check your mount (df -h) and re-run, or point BACKUP_ROOT somewhere else." >&2
+    exit 1
+  fi
 fi
 
 case "$(uname -m)" in
