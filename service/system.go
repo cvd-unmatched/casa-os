@@ -37,6 +37,7 @@ import (
 type SystemService interface {
 	UpdateSystemVersion(version string)
 	UpdateFromRepo()
+	CheckForkUpdate() (needUpdate bool, current string, latest string)
 	GetSystemConfigDebug() []string
 	GetCasaOSLogs(lineNumber int) string
 	UpdateAssist()
@@ -462,6 +463,31 @@ func (s *systemService) UpdateSystemVersion(version string) {
 // happens, and the frontend polls for the service coming back afterwards.
 func (s *systemService) UpdateFromRepo() {
 	go command.OnlyExec("curl -fsSL https://raw.githubusercontent.com/cvd-unmatched/casa-os/main/update.sh | bash")
+}
+
+// CheckForkUpdate compares the release tag this binary was built from
+// (common.ForkVersion, set via -ldflags in .github/workflows/release.yml)
+// against the latest tag published on this fork's own GitHub repo - not
+// IceWhale's api.casaos.io. Unlike UpdateSystemVersion's check, a binary
+// built any other way than that release workflow (e.g. a local `go build`)
+// has an empty ForkVersion, in which case we can't tell and say no update
+// is needed rather than guessing.
+func (s *systemService) CheckForkUpdate() (bool, string, string) {
+	current := common.ForkVersion
+	if current == "" {
+		return false, current, ""
+	}
+
+	resp := httper.Get("https://api.github.com/repos/cvd-unmatched/casa-os/releases/latest", map[string]string{
+		"Accept":     "application/vnd.github+json",
+		"User-Agent": "casaos-fork-update-check",
+	})
+	latest := gjson.Get(resp, "tag_name").String()
+	if latest == "" {
+		return false, current, ""
+	}
+
+	return latest != current, current, latest
 }
 
 func (s *systemService) UpdateAssist() {

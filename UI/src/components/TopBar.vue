@@ -457,9 +457,29 @@ export default {
      * @return {*} void
      */
     updateFromRepo() {
+      this.$api.sys.checkForkUpdate().then((res) => {
+        const data = res.data.data
+        if (data.current_version && !data.need_update) {
+          this.$refs.settingsDrop.toggle()
+          this.$buefy.toast.open({
+            message: this.$t('Already up to date ({version}).', { version: data.current_version }),
+            type: 'is-success',
+          })
+          return
+        }
+        this.confirmAndUpdateFromRepo(data.latest_version)
+      }).catch(() => {
+        // couldn't reach GitHub to check - don't block the update over that, just proceed without a version in the message
+        this.confirmAndUpdateFromRepo()
+      })
+    },
+
+    confirmAndUpdateFromRepo(latestVersion) {
       this.$buefy.dialog.confirm({
         title: this.$t('Update from repository'),
-        message: this.$t('This downloads the latest release from your own repository, backs up the current install, and restarts CasaOS. It can take a minute or two.'),
+        message: latestVersion
+          ? this.$t('This downloads {version} from your own repository, backs up the current install, and restarts CasaOS. It can take a minute or two.', { version: latestVersion })
+          : this.$t('This downloads the latest release from your own repository, backs up the current install, and restarts CasaOS. It can take a minute or two.'),
         type: 'is-dark',
         confirmText: this.$t('Update now'),
         cancelText: this.$t('Cancel'),

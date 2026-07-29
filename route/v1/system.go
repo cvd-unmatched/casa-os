@@ -82,6 +82,23 @@ func PostUpdateFromRepo(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
 }
 
+// @Summary check whether a newer release of this fork is available
+// @Produce  application/json
+// @Accept application/json
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/update-fork/check [get]
+func GetForkUpdateCheck(ctx echo.Context) error {
+	needUpdate, current, latest := service.MyService.System().CheckForkUpdate()
+	data := map[string]interface{}{
+		"need_update":     needUpdate,
+		"current_version": current,
+		"latest_version":  latest,
+	}
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: data})
+}
+
 // @Summary usage for every real mounted filesystem (like `df -h`), not just the root disk
 // @Produce  application/json
 // @Accept application/json

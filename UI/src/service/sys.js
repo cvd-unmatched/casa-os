@@ -99,6 +99,11 @@ const sys = {
 		return api.post(`${PREFIX}/update-fork`);
 	},
 
+	// check whether a newer release of this fork is available
+	checkForkUpdate() {
+		return api.get(`${PREFIX}/update-fork/check`);
+	},
+
 	// stop casaos
 	stopCasaOS() {
 		return api.post(`${PREFIX}/stop`);
