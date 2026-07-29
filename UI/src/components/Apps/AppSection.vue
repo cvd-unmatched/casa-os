@@ -25,24 +25,39 @@
 				<b-dropdown-item aria-role="menuitem" @click="showExternalLinkPanel">
 					{{ $t('Add external link/APP') }}
 				</b-dropdown-item>
+				<b-dropdown-item aria-role="menuitem" @click="promptNewFolder">
+					{{ $t('New Folder') }}
+				</b-dropdown-item>
 			</b-dropdown>
 		</div>
 		<!-- Title Bar End -->
 
 		<!-- App List Start -->
 		<draggable
-			v-model="appList"
+			v-model="displayList"
 			:draggable="draggable"
 			class="app-list contextmenu-canvas"
 			tag="div"
 			v-bind="dragOptions"
-			@end="onSortEnd"
+			@end="onDisplaySortEnd"
 			@start="drag = true"
 		>
 			<!-- App Icon Card Start -->
 			<template v-if="!isLoading">
-				<div v-for="item in appList" :id="'app-' + item.name" :key="'app-' + item.name" class="handle">
+				<div
+					v-for="item in displayList"
+					:id="(item.__folder ? 'folder-' : 'app-') + (item.__folder ? item.id : item.name)"
+					:key="(item.__folder ? 'folder-' : 'app-') + (item.__folder ? item.id : item.name)"
+					class="handle"
+				>
+					<app-folder-card
+						v-if="item.__folder"
+						:folder="item"
+						:preview-apps="folderPreviewApps(item)"
+						@open="openFolder"
+					></app-folder-card>
 					<app-card
+						v-else
 						:item="item"
 						@configApp="showConfigPanel"
 						@importApp="showContainerPanel"
@@ -95,6 +110,8 @@
 <script>
 import AppCard from './AppCard.vue'
 import AppCardSkeleton from './AppCardSkeleton.vue'
+import AppFolderCard from './AppFolderCard.vue'
+import AppFolderPanel from './AppFolderPanel.vue'
 import AppPanel from './AppPanel.vue'
 import ExternalLinkPanel from '@/components/Apps/ExternalLinkPanel'
 import AppSectionTitleTip from './AppSectionTitleTip.vue'
@@ -108,6 +125,7 @@ import business_LinkApp from '@/mixins/app/Business_LinkApp'
 import isEqual from 'lodash/isEqual'
 import { ice_i18n } from '@/mixins/base/common-i18n'
 import YAML from 'yamljs'
+import { nanoid } from 'nanoid'
 
 const SYNCTHING_STORE_ID = 74
 
@@ -136,6 +154,8 @@ const builtInApplications = [
 ]
 
 const orderConfig = 'app_order'
+const groupsConfig = 'app_groups'
+const displayOrderConfig = 'app_display_order'
 
 export default {
 	mixins: [business_ShowNewAppTag, business_LinkApp],
@@ -154,18 +174,29 @@ export default {
 			retryCount: 0,
 			appListErrorMessage: '',
 			skCount: 0,
-			ListRefreshTimer: null
+			ListRefreshTimer: null,
+			groups: [],
+			displayList: [],
+			displayOrder: []
 		}
 	},
 	components: {
 		AppCard,
+		AppFolderCard,
 		draggable,
 		AppSectionTitleTip,
 		AppCardSkeleton
 	},
 	provide () {
 		return {
-			openAppStore: this.showInstall
+			openAppStore: this.showInstall,
+			getFolders: () => this.groups,
+			getAppList: () => this.appList,
+			createFolder: this.createFolder,
+			renameFolder: this.renameFolder,
+			deleteFolder: this.deleteFolder,
+			moveAppToFolder: this.moveAppToFolder,
+			removeAppFromFolder: this.removeAppFromFolder
 		}
 	},
 	computed: {
@@ -185,7 +216,7 @@ export default {
 		}
 	},
 	created () {
-		this.getList()
+		this.getGroups().then(() => this.getList())
 		this.draggable = this.isMobile() ? '' : '.handle'
 		this.$EventBus.$on(events.OPEN_APP_STORE_AND_GOTO_SYNCTHING, () => {
 			this.showInstall(SYNCTHING_STORE_ID)
@@ -283,6 +314,8 @@ export default {
 					this.saveSortData()
 				}
 
+				this.rebuildDisplayList()
+
 				this.isLoading = false
 				this.retryCount = 0
 				this.appListErrorMessage = ''
@@ -339,6 +372,181 @@ export default {
 		onSortEnd () {
 			this.drag = false
 			this.saveSortData()
+		},
+
+		/**
+		 * @description: Load persisted folders + combined display order
+		 * @return {*} Promise
+		 */
+		async getGroups () {
+			this.groups = await this.$api.users
+				.getCustomStorage(groupsConfig)
+				.then(res => res.data.data.data || [])
+				.catch(() => [])
+			this.displayOrder = await this.$api.users
+				.getCustomStorage(displayOrderConfig)
+				.then(res => res.data.data.data || [])
+				.catch(() => [])
+		},
+
+		saveGroups () {
+			this.$api.users.setCustomStorage(groupsConfig, { data: this.groups })
+		},
+
+		saveDisplayOrder () {
+			this.$api.users.setCustomStorage(displayOrderConfig, { data: this.displayOrder })
+		},
+
+		/**
+		 * @description: Drop app names from folders that no longer exist (e.g. uninstalled)
+		 * @return {*} void
+		 */
+		pruneMissingApps () {
+			const validNames = new Set(this.appList.map(item => item.name))
+			let changed = false
+			this.groups.forEach((group) => {
+				const before = group.appNames.length
+				group.appNames = group.appNames.filter(name => validNames.has(name))
+				if (group.appNames.length !== before) changed = true
+			})
+			if (changed) this.saveGroups()
+		},
+
+		/**
+		 * @description: Recompute the combined (folders + ungrouped apps) list that drives the grid
+		 * @return {*} void
+		 */
+		rebuildDisplayList () {
+			this.pruneMissingApps()
+
+			const grouped = new Set()
+			this.groups.forEach(group => group.appNames.forEach(name => grouped.add(name)))
+
+			const ungrouped = this.appList.filter(item => !grouped.has(item.name))
+			const folderItems = this.groups.map(group => ({
+				__folder: true,
+				id: group.id,
+				name: group.name,
+				appNames: group.appNames
+			}))
+
+			const keyOf = item => (item.__folder ? `folder:${item.id}` : item.name)
+			const orderIndex = (key) => {
+				const idx = this.displayOrder.indexOf(key)
+				return idx === -1 ? this.displayOrder.length : idx
+			}
+
+			const combined = [...folderItems, ...ungrouped].sort((a, b) => orderIndex(keyOf(a)) - orderIndex(keyOf(b)))
+
+			this.displayList = combined
+
+			const newOrder = combined.map(keyOf)
+			if (!isEqual(this.displayOrder, newOrder)) {
+				this.displayOrder = newOrder
+				this.saveDisplayOrder()
+			}
+		},
+
+		/**
+		 * @description: Handle on Sort End for the combined folders + apps grid
+		 * @return {*} void
+		 */
+		onDisplaySortEnd () {
+			this.drag = false
+			this.displayOrder = this.displayList.map(item => (item.__folder ? `folder:${item.id}` : item.name))
+			this.saveDisplayOrder()
+		},
+
+		folderPreviewApps (folder) {
+			return folder.appNames
+				.map(name => this.appList.find(item => item.name === name))
+				.filter(Boolean)
+				.slice(0, 4)
+		},
+
+		promptNewFolder () {
+			this.$buefy.dialog.prompt({
+				message: this.$t('Folder name'),
+				inputAttrs: {
+					placeholder: this.$t('New Folder'),
+					maxlength: 40
+				},
+				trapFocus: true,
+				confirmText: this.$t('Create'),
+				onConfirm: (value) => {
+					if (value && value.trim()) this.createFolder(value.trim())
+				}
+			})
+		},
+
+		createFolder (name, appName) {
+			const id = nanoid()
+			this.groups.push({ id, name, appNames: appName ? [appName] : [] })
+			this.saveGroups()
+			this.rebuildDisplayList()
+			return id
+		},
+
+		renameFolder (id, name) {
+			const group = this.groups.find(g => g.id === id)
+			if (!group) return
+			group.name = name
+			this.saveGroups()
+			this.rebuildDisplayList()
+		},
+
+		deleteFolder (id) {
+			this.groups = this.groups.filter(g => g.id !== id)
+			this.saveGroups()
+			this.rebuildDisplayList()
+		},
+
+		moveAppToFolder (appName, folderId) {
+			this.groups.forEach((group) => {
+				const idx = group.appNames.indexOf(appName)
+				if (idx !== -1) group.appNames.splice(idx, 1)
+			})
+			const target = this.groups.find(g => g.id === folderId)
+			if (target && !target.appNames.includes(appName)) target.appNames.push(appName)
+			this.saveGroups()
+			this.rebuildDisplayList()
+		},
+
+		removeAppFromFolder (appName) {
+			let changed = false
+			this.groups.forEach((group) => {
+				const idx = group.appNames.indexOf(appName)
+				if (idx !== -1) {
+					group.appNames.splice(idx, 1)
+					changed = true
+				}
+			})
+			if (changed) {
+				this.saveGroups()
+				this.rebuildDisplayList()
+			}
+		},
+
+		openFolder (folder) {
+			this.$buefy.modal.open({
+				parent: this,
+				component: AppFolderPanel,
+				hasModalCard: true,
+				customClass: 'app-folder-panel-modal',
+				fullScreen: this.isMobile(),
+				trapFocus: true,
+				canCancel: ['escape', 'outside'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+				events: {
+					configApp: (item, isCasa) => this.showConfigPanel(item, isCasa),
+					importApp: item => this.showContainerPanel(item),
+					updateState: () => this.getList()
+				},
+				props: {
+					folderId: folder.id
+				}
+			})
 		},
 
 		/**

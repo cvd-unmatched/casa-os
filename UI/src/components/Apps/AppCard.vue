@@ -16,10 +16,14 @@ export default {
     CTooltip: cTooltip,
   },
   mixins: [business_ShowNewAppTag, business_OpenThirdApp, business_LinkApp, commonI18n],
-  inject: ['homeShowFiles', 'openAppStore'],
+  inject: ['homeShowFiles', 'openAppStore', 'getFolders', 'moveAppToFolder', 'removeAppFromFolder', 'createFolder'],
   props: {
     item: {
       type: Object,
+    },
+    currentFolderId: {
+      type: String,
+      default: null,
     },
   },
   data() {
@@ -103,6 +107,9 @@ export default {
     },
     shutDownClass() {
       return this.item.status !== 'running' ? 'shutdown-rounded' : ''
+    },
+    availableFolders() {
+      return this.getFolders().filter(folder => folder.id !== this.currentFolderId)
     },
 
   },
@@ -538,6 +545,33 @@ export default {
      * @param {string} status
      * @return {string}
      */
+    moveToFolder(folderId) {
+      this.moveAppToFolder(this.item.name, folderId)
+      this.$refs.dro.isActive = false
+    },
+
+    removeFromFolder() {
+      this.removeAppFromFolder(this.item.name)
+      this.$refs.dro.isActive = false
+    },
+
+    promptMoveToNewFolder() {
+      this.$refs.dro.isActive = false
+      this.$buefy.dialog.prompt({
+        message: this.$t('Folder name'),
+        inputAttrs: {
+          placeholder: this.$t('New Folder'),
+          maxlength: 40,
+        },
+        trapFocus: true,
+        confirmText: this.$t('Create'),
+        onConfirm: (value) => {
+          if (value && value.trim())
+            this.createFolder(value.trim(), this.item.name)
+        },
+      })
+    },
+
     dotClass(status, loadState) {
       // For updating
       if (loadState) {
@@ -789,6 +823,21 @@ export default {
               </div>
             </div>
           </div>
+
+          <div class="folder-menu">
+            <b-button expanded type="is-text" @click="promptMoveToNewFolder">
+              {{ $t('New Folder') }}…
+            </b-button>
+            <b-button
+              v-for="folder in availableFolders" :key="folder.id" expanded type="is-text"
+              @click="moveToFolder(folder.id)"
+            >
+              {{ $t('Move to') }} "{{ folder.name }}"
+            </b-button>
+            <b-button v-if="currentFolderId" expanded type="is-text" @click="removeFromFolder">
+              {{ $t('Remove from folder') }}
+            </b-button>
+          </div>
         </b-dropdown-item>
       </b-dropdown>
     </div>
@@ -926,6 +975,16 @@ export default {
       .gap {
         margin-left: -4px;
         margin-right: -4px;
+      }
+
+      .folder-menu {
+        border-top: hsla(208, 16%, 94%, 1) 1px solid;
+        margin-top: 1px;
+        padding-top: 1px;
+
+        .button.is-text {
+          justify-content: flex-start;
+        }
       }
 
       ._b-bor {
