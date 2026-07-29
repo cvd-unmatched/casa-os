@@ -36,6 +36,7 @@
 		<draggable
 			v-model="displayList"
 			:draggable="draggable"
+			:move="handleDragMove"
 			class="app-list contextmenu-canvas"
 			tag="div"
 			v-bind="dragOptions"
@@ -456,8 +457,90 @@ export default {
 		 * @description: Handle on Sort End for the combined folders + apps grid
 		 * @return {*} void
 		 */
+		/**
+		 * @description: vuedraggable's :move handler - lets us intercept a drag
+		 * while it's hovering the CENTER of another tile (rather than near its
+		 * edges) and treat that as "drop to merge into a folder" instead of a
+		 * normal reorder, matching iOS/Android home-screen behaviour.
+		 * Returning false blocks the normal reorder for this cursor position.
+		 * @return {boolean}
+		 */
+		handleDragMove (evt, originalEvent) {
+			const draggedItem = evt.draggedContext && evt.draggedContext.element
+			const relatedItem = evt.relatedContext && evt.relatedContext.element
+
+			if (!draggedItem || !relatedItem || relatedItem === draggedItem) {
+				this.clearMergeTarget()
+				return true
+			}
+
+			const relatedRect = evt.related && evt.related.getBoundingClientRect ? evt.related.getBoundingClientRect() : null
+			const pointer = originalEvent && (typeof originalEvent.clientX === 'number'
+				? originalEvent
+				: (originalEvent.touches && originalEvent.touches[0]))
+
+			if (!relatedRect || !pointer) {
+				this.clearMergeTarget()
+				return true
+			}
+
+			const marginX = relatedRect.width * 0.25
+			const marginY = relatedRect.height * 0.25
+			const withinCenter = pointer.clientX > relatedRect.left + marginX
+				&& pointer.clientX < relatedRect.right - marginX
+				&& pointer.clientY > relatedRect.top + marginY
+				&& pointer.clientY < relatedRect.bottom - marginY
+
+			if (withinCenter && !draggedItem.__folder) {
+				this.setMergeTarget(evt.related, relatedItem, draggedItem)
+				return false
+			}
+
+			this.clearMergeTarget()
+			return true
+		},
+
+		setMergeTarget (el, targetItem, draggedItem) {
+			if (this._mergeTargetEl && this._mergeTargetEl !== el)
+				this._mergeTargetEl.classList.remove('drag-merge-target')
+			this._mergeTargetEl = el
+			this._mergeTargetItem = targetItem
+			this._draggedItem = draggedItem
+			el.classList.add('drag-merge-target')
+		},
+
+		clearMergeTarget () {
+			if (this._mergeTargetEl)
+				this._mergeTargetEl.classList.remove('drag-merge-target')
+			this._mergeTargetEl = null
+			this._mergeTargetItem = null
+			this._draggedItem = null
+		},
+
+		performMerge (draggedItem, targetItem) {
+			if (targetItem.__folder) {
+				this.moveAppToFolder(draggedItem.name, targetItem.id)
+			}
+			else {
+				const id = nanoid()
+				this.groups.push({ id, name: this.$t('New Folder'), appNames: [targetItem.name, draggedItem.name], color: null })
+				this.saveGroups()
+				this.rebuildDisplayList()
+			}
+		},
+
 		onDisplaySortEnd () {
 			this.drag = false
+
+			if (this._mergeTargetItem && this._draggedItem) {
+				const targetItem = this._mergeTargetItem
+				const draggedItem = this._draggedItem
+				this.clearMergeTarget()
+				this.performMerge(draggedItem, targetItem)
+				return
+			}
+			this.clearMergeTarget()
+
 			this.displayOrder = this.displayList.map(item => (item.__folder ? `folder:${item.id}` : item.name))
 			this.saveDisplayOrder()
 		},
@@ -817,6 +900,14 @@ export default {
 
 	@include fullhd {
 		grid-template-columns: repeat(5, minmax(0, 1fr));
+	}
+}
+
+.handle.drag-merge-target {
+	> * {
+		transform: scale(1.08);
+		box-shadow: 0 0 0 3px $casablue, 0 6px 16px rgba(0, 0, 0, 0.3);
+		transition: transform 0.15s, box-shadow 0.15s;
 	}
 }
 </style>
