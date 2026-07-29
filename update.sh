@@ -38,12 +38,20 @@ fi
 # land backups on the root disk instead of the intended bulk-storage disk.
 # A custom BACKUP_ROOT elsewhere (e.g. /root/casaos-backups) is trusted as-is.
 if [[ "$BACKUP_ROOT" == /mnt/* ]]; then
-  BACKUP_MOUNT="$(dirname "$BACKUP_ROOT")"
-  while [[ "$BACKUP_MOUNT" != "/" && ! -d "$BACKUP_MOUNT" ]]; do
-    BACKUP_MOUNT="$(dirname "$BACKUP_MOUNT")"
+  # Walk up checking `mountpoint` at every level (not just the first
+  # existing directory - a subdirectory like .../casaos-backups can easily
+  # already exist from a previous run without itself being the mount).
+  check_path="$BACKUP_ROOT"
+  found_mount=""
+  while [[ "$check_path" != "/" && "$check_path" != "." ]]; do
+    check_path="$(dirname "$check_path")"
+    if mountpoint -q "$check_path" 2>/dev/null; then
+      found_mount="$check_path"
+      break
+    fi
   done
-  if ! mountpoint -q "$BACKUP_MOUNT" 2>/dev/null; then
-    echo "$BACKUP_MOUNT doesn't look like a mounted filesystem right now." >&2
+  if [[ -z "$found_mount" ]]; then
+    echo "No mounted filesystem found above $BACKUP_ROOT." >&2
     echo "Refusing to back up under /mnt/... - it would silently land on the root disk instead. Check your mount (df -h) and re-run, or point BACKUP_ROOT somewhere else." >&2
     exit 1
   fi
