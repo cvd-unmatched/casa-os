@@ -479,11 +479,29 @@ export default {
 				? originalEvent
 				: (originalEvent.touches && originalEvent.touches[0]))
 
-			if (!relatedRect || !pointer) {
+			if (!relatedRect || !pointer || draggedItem.__folder) {
 				this.clearMergeTarget()
 				return true
 			}
 
+			// Already armed for this exact target: stay armed as long as the
+			// pointer is anywhere within its FULL bounds, not just the smaller
+			// zone that armed it. A real mouse isn't perfectly still, and
+			// re-checking the tight zone on every single move event meant a
+			// tiny jitter right before releasing the mouse would silently
+			// cancel the merge and fall back to a plain reorder instead.
+			if (this._mergeTargetItem === relatedItem) {
+				const stillWithinBounds = pointer.clientX >= relatedRect.left && pointer.clientX <= relatedRect.right
+					&& pointer.clientY >= relatedRect.top && pointer.clientY <= relatedRect.bottom
+				if (stillWithinBounds)
+					return false
+				this.clearMergeTarget()
+				return true
+			}
+
+			// Not yet armed for this target: require the pointer to be well
+			// within its center before arming, so normal reordering near the
+			// edges of a tile is unaffected.
 			const marginX = relatedRect.width * 0.25
 			const marginY = relatedRect.height * 0.25
 			const withinCenter = pointer.clientX > relatedRect.left + marginX
@@ -491,7 +509,7 @@ export default {
 				&& pointer.clientY > relatedRect.top + marginY
 				&& pointer.clientY < relatedRect.bottom - marginY
 
-			if (withinCenter && !draggedItem.__folder) {
+			if (withinCenter) {
 				this.setMergeTarget(evt.related, relatedItem, draggedItem)
 				return false
 			}

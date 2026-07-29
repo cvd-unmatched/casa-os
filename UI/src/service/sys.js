@@ -105,10 +105,11 @@ const sys = {
 	},
 
 	// upload a custom app icon to the configured icon storage disk
+	// (no explicit Content-Type here - axios auto-detects FormData and sets
+	// the header itself, including the required boundary; overriding it
+	// manually strips the boundary and the backend can't parse the body)
 	uploadCustomIcon(formData) {
-		return api.post(`${PREFIX}/custom-icon`, formData, {
-			headers: { 'Content-Type': 'multipart/form-data' },
-		});
+		return api.post(`${PREFIX}/custom-icon`, formData);
 	},
 
 	// stop casaos
