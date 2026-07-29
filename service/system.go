@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	net2 "net"
 	"os"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/common_err"
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/httper"
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/ip_helper"
+	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 
@@ -56,6 +58,8 @@ type SystemService interface {
 	GetNetState(name string) string
 	GetDiskInfo() *disk.UsageStat
 	GetAllDisksUsage() []DiskUsageInfo
+	SaveCustomIcon(mountpoint string, fileHeader *multipart.FileHeader) (string, error)
+	ResolveCustomIconPath(requestedPath string) (string, error)
 	GetSysInfo() host.InfoStat
 	GetDeviceTree() string
 	GetDeviceInfo() model.DeviceInfo
@@ -325,6 +329,106 @@ func (c *systemService) GetAllDisksUsage() []DiskUsageInfo {
 	}
 
 	return result
+}
+
+// customIconSubdir is the fixed folder name created under whichever disk the
+// user picks for custom app icons - GetCustomIcon (the unauthenticated serve
+// route) only ever serves files whose parent directory is exactly this, one
+// level under a currently-mounted real disk, so it can't be tricked into
+// serving arbitrary files elsewhere on the system.
+const customIconSubdir = "casaos-custom-icons"
+
+var allowedIconExt = map[string]bool{
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".svg": true, ".webp": true, ".ico": true,
+}
+
+// isMountedDisk checks that mountpoint is one of the currently mounted real
+// (non-pseudo) filesystems - used both when saving an icon (don't let the
+// frontend point us at an arbitrary directory) and when serving one (don't
+// keep serving from a disk that's since been unmounted).
+func (c *systemService) isMountedDisk(mountpoint string) bool {
+	partitions, err := disk.Partitions(true)
+	if err != nil {
+		return false
+	}
+	clean := filepath.Clean(mountpoint)
+	for _, p := range partitions {
+		if pseudoFstypes[p.Fstype] {
+			continue
+		}
+		if filepath.Clean(p.Mountpoint) == clean {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *systemService) SaveCustomIcon(mountpoint string, fileHeader *multipart.FileHeader) (string, error) {
+	if !c.isMountedDisk(mountpoint) {
+		return "", fmt.Errorf("%s is not a currently mounted disk", mountpoint)
+	}
+
+	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+	if !allowedIconExt[ext] {
+		return "", fmt.Errorf("unsupported icon file type: %s", ext)
+	}
+
+	const maxIconSize = 5 * 1024 * 1024 // 5MB
+	if fileHeader.Size > maxIconSize {
+		return "", fmt.Errorf("icon file too large (max 5MB)")
+	}
+
+	src, err := fileHeader.Open()
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+
+	dir := filepath.Join(mountpoint, customIconSubdir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+
+	destPath := filepath.Join(dir, uuid.NewString()+ext)
+	dest, err := os.Create(destPath)
+	if err != nil {
+		return "", err
+	}
+	defer dest.Close()
+
+	if _, err := io.Copy(dest, src); err != nil {
+		os.Remove(destPath)
+		return "", err
+	}
+
+	return destPath, nil
+}
+
+// ResolveCustomIconPath validates a requested icon path is actually
+// <some currently-mounted disk>/casaos-custom-icons/<filename> before
+// GetCustomIcon serves it - this is what keeps the unauthenticated serve
+// route from being usable to read arbitrary files off the server.
+func (c *systemService) ResolveCustomIconPath(requestedPath string) (string, error) {
+	clean := filepath.Clean(requestedPath)
+	if !filepath.IsAbs(clean) {
+		return "", fmt.Errorf("not an absolute path")
+	}
+
+	parentDir := filepath.Dir(clean)
+	if filepath.Base(parentDir) != customIconSubdir {
+		return "", fmt.Errorf("not under a %s directory", customIconSubdir)
+	}
+
+	mountpoint := filepath.Dir(parentDir)
+	if !c.isMountedDisk(mountpoint) {
+		return "", fmt.Errorf("%s is not a currently mounted disk", mountpoint)
+	}
+
+	if info, err := os.Stat(clean); err != nil || info.IsDir() {
+		return "", fmt.Errorf("icon file not found")
+	}
+
+	return clean, nil
 }
 
 func (c *systemService) GetNetState(name string) string {

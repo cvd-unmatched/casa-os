@@ -104,6 +104,13 @@ const sys = {
 		return api.get(`${PREFIX}/update-fork/check`);
 	},
 
+	// upload a custom app icon to the configured icon storage disk
+	uploadCustomIcon(formData) {
+		return api.post(`${PREFIX}/custom-icon`, formData, {
+			headers: { 'Content-Type': 'multipart/form-data' },
+		});
+	},
+
 	// stop casaos
 	stopCasaOS() {
 		return api.post(`${PREFIX}/stop`);

@@ -105,6 +105,7 @@ export default {
       baseUrl: '',
       portSelected: null,
       serviceStableVersion: '',
+      isUploadingIcon: false,
       configData: {
         'services': {
           main_app: {
@@ -313,6 +314,49 @@ export default {
       else {
         const appIcon = image.split(':')[0].split('/').pop()
         return `https://icon.casaos.io/main/all/${appIcon}.png`
+      }
+    },
+
+    /**
+     * @description: Upload a local icon file instead of typing a URL. Saved
+     * server-side under a casaos-custom-icons folder on whichever disk is
+     * configured in Settings > Icon Storage Disk.
+     * @param {Event} event
+     * @return {*} void
+     */
+    async onIconFileSelected(event) {
+      const file = event.target.files && event.target.files[0]
+      event.target.value = ''
+      if (!file)
+        return
+
+      const storageRes = await this.$api.users.getCustomStorage('icon_storage_mountpoint')
+      const mountpoint = storageRes.data.data && storageRes.data.data.mountpoint
+      if (!mountpoint) {
+        this.$buefy.toast.open({
+          message: this.$t('Set an icon storage disk first (Settings > Icon Storage Disk).'),
+          type: 'is-warning',
+        })
+        return
+      }
+
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('mountpoint', mountpoint)
+
+      this.isUploadingIcon = true
+      try {
+        const res = await this.$api.sys.uploadCustomIcon(formData)
+        this.configData['x-casaos'].icon = res.data.data.url
+      }
+      catch (error) {
+        this.$buefy.toast.open({
+          message: error.response && error.response.data && error.response.data.message ? error.response.data.message : this.$t('Failed to upload icon.'),
+          type: 'is-danger',
+        })
+      }
+      finally {
+        this.isUploadingIcon = false
       }
     },
 
@@ -858,6 +902,12 @@ export default {
               </span>
             </p>
             <b-input v-model="configData['x-casaos'].icon" :placeholder="$t('Your custom icon URL')" expanded />
+            <p class="control">
+              <input ref="iconFileInput" type="file" accept="image/*" class="is-hidden" @change="onIconFileSelected">
+              <b-button icon-left="paste-outline" icon-pack="casa" :loading="isUploadingIcon" @click="$refs.iconFileInput.click()">
+                {{ $t('Upload') }}
+              </b-button>
+            </p>
           </b-field>
 
           <b-field v-if="key === firstAppName" label="Web UI">
