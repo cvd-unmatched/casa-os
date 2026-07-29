@@ -3,6 +3,7 @@ import AccountPanel from './account/AccountPanel.vue'
 import TerminalPanel from './logsAndTerminal/TerminalPanel.vue'
 import PortPanel from './settings/PortPanel.vue'
 import UpdateModal from './settings/UpdateModal.vue'
+import IconStorageModal from './settings/IconStorageModal.vue'
 import { mixin } from '@/mixins/mixin'
 import messages from '@/assets/lang'
 
@@ -244,6 +245,19 @@ export default {
     showChangeWallpaperModal() {
       this.$EventBus.$emit(events.SHOW_CHANGE_WALLPAPER_MODAL)
       this.$refs.settingsDrop.toggle()
+    },
+
+    showIconStorageModal() {
+      this.$refs.settingsDrop.toggle()
+      this.$buefy.modal.open({
+        parent: this,
+        component: IconStorageModal,
+        hasModalCard: true,
+        trapFocus: true,
+        canCancel: ['escape', 'outside'],
+        scroll: 'keep',
+        animation: 'zoom-in',
+      })
     },
 
     /*************************************************
@@ -693,6 +707,22 @@ export default {
             </div>
           </div>
           <!-- Background End -->
+
+          <!-- Icon Storage Start -->
+          <div
+            class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
+          >
+            <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+              <b-icon class="mr-1 ml-2" icon="picture-upload-outline" pack="casa" size="is-20" />
+              {{ $t("Icon Storage Disk") }}
+            </div>
+            <div class="ml-2">
+              <b-button rounded size="is-small" type="is-dark" @click="showIconStorageModal">
+                {{ $t("Change") }}
+              </b-button>
+            </div>
+          </div>
+          <!-- Icon Storage End -->
 
           <!--  Show other Docker container app(s) Switch Start  -->
           <div

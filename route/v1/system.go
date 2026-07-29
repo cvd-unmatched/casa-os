@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -108,6 +109,48 @@ func GetForkUpdateCheck(ctx echo.Context) error {
 // @Router /sys/disks-usage [get]
 func GetAllDisksUsage(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: service.MyService.System().GetAllDisksUsage()})
+}
+
+// @Summary upload a custom app icon to a chosen disk
+// @Produce  application/json
+// @Accept multipart/form-data
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/custom-icon [post]
+func PostCustomIcon(ctx echo.Context) error {
+	mountpoint := ctx.FormValue("mountpoint")
+	if mountpoint == "" {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "mountpoint is required"})
+	}
+
+	fileHeader, err := ctx.FormFile("file")
+	if err != nil {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "no file provided"})
+	}
+
+	savedPath, err := service.MyService.System().SaveCustomIcon(mountpoint, fileHeader)
+	if err != nil {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
+
+	data := map[string]string{
+		"url": "/v1/custom-icons?path=" + url.QueryEscape(savedPath),
+	}
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: data})
+}
+
+// GetCustomIcon is intentionally unauthenticated (so plain <img> tags can use
+// it without embedding a login token in a URL that gets saved into a
+// docker-compose file) - ResolveCustomIconPath is what keeps it from serving
+// anything other than a file directly inside a casaos-custom-icons folder on
+// a currently-mounted disk.
+func GetCustomIcon(ctx echo.Context) error {
+	resolved, err := service.MyService.System().ResolveCustomIconPath(ctx.QueryParam("path"))
+	if err != nil {
+		return ctx.NoContent(http.StatusNotFound)
+	}
+	return ctx.File(resolved)
 }
 
 // @Summary  get logs

@@ -37,6 +37,7 @@ func InitV1Router() http.Handler {
 		return ctx.String(200, "pong")
 	})
 	e.GET("/v1/recover/:type", v1.GetRecoverStorage)
+	e.GET("/v1/custom-icons", v1.GetCustomIcon)
 	v1Group := e.Group("/v1")
 	//	e.Any("/v1/test", v1.CheckNetwork)
 	v1Group.Use(echo_middleware.JWTWithConfig(echo_middleware.JWTConfig{
@@ -73,6 +74,7 @@ func InitV1Router() http.Handler {
 
 			v1SysGroup.GET("/hardware", v1.GetSystemHardwareInfo) // hardware/info
 			v1SysGroup.GET("/disks-usage", v1.GetAllDisksUsage)
+			v1SysGroup.POST("/custom-icon", v1.PostCustomIcon)
 
 			v1SysGroup.GET("/wsssh", v1.WsSsh)
 			v1SysGroup.POST("/ssh-login", v1.PostSshLogin)
