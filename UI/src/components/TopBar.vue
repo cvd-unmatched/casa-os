@@ -45,6 +45,12 @@ export default {
         version: Object,
       },
       isUpdating: false,
+      forkUpdateInfo: {
+        current_version: '',
+        latest_version: '',
+        need_update: false,
+        checked: false,
+      },
       latestText: 'Currently at the latest version',
       updateText: 'A new version is available!',
 
@@ -143,6 +149,7 @@ export default {
   },
   mounted() {
     this.checkVersion()
+    this.checkForkVersion()
     this.getUserInfo()
     this.getUsbStatus()
     this.getHardwareInfo()
@@ -464,6 +471,27 @@ export default {
     },
 
     /**
+     * @description: Check this fork's current vs. latest release, for the
+     * version label and the Update button's disabled state. Best-effort -
+     * if it fails (no network to GitHub, or a locally-built binary with no
+     * embedded version), leave the button enabled rather than guessing.
+     * @return {*} void
+     */
+    checkForkVersion() {
+      this.$api.sys.checkForkUpdate().then((res) => {
+        const data = res.data.data
+        this.forkUpdateInfo = {
+          current_version: data.current_version || '',
+          latest_version: data.latest_version || '',
+          need_update: !!(data.current_version && data.need_update),
+          checked: true,
+        }
+      }).catch(() => {
+        this.forkUpdateInfo.checked = false
+      })
+    },
+
+    /**
      * @description: Pull the latest release from this fork's own repo and swap it in.
      * Reuses the same "wait for the service to come back, then reload" overlay
      * and polling as power(), since an update.sh run stops and restarts the
@@ -473,6 +501,12 @@ export default {
     updateFromRepo() {
       this.$api.sys.checkForkUpdate().then((res) => {
         const data = res.data.data
+        this.forkUpdateInfo = {
+          current_version: data.current_version || '',
+          latest_version: data.latest_version || '',
+          need_update: !!(data.current_version && data.need_update),
+          checked: true,
+        }
         if (data.current_version && !data.need_update) {
           this.$refs.settingsDrop.toggle()
           this.$buefy.toast.open({
@@ -862,9 +896,24 @@ export default {
                 <b-icon class="mr-1 ml-2" icon="update-outline" pack="casa" size="is-20" />
                 {{ $t("Update from repository") }}
               </div>
-              <b-button class="ml-2" rounded size="is-small" type="is-dark" @click="updateFromRepo">
+              <b-button
+                class="ml-2" rounded size="is-small" type="is-dark"
+                :disabled="forkUpdateInfo.checked && !forkUpdateInfo.need_update" @click="updateFromRepo"
+              >
                 {{ $t("Update") }}
               </b-button>
+            </div>
+            <div v-if="forkUpdateInfo.current_version" class="is-flex is-align-items-center pl-55 ml-1 is-size-7">
+              <template v-if="forkUpdateInfo.checked && !forkUpdateInfo.need_update">
+                {{ $t('Up to date') }} ({{ forkUpdateInfo.current_version }})
+                <b-icon class="ml-1" custom-size="mdi-18px" icon="check" type="is-success" />
+              </template>
+              <template v-else-if="forkUpdateInfo.need_update">
+                {{ $t('{version} available', { version: forkUpdateInfo.latest_version }) }} ({{ $t('currently') }} {{ forkUpdateInfo.current_version }})
+              </template>
+              <template v-else>
+                {{ forkUpdateInfo.current_version }}
+              </template>
             </div>
           </div>
           <!-- Update from fork repo End -->

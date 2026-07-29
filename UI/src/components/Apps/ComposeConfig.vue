@@ -324,12 +324,39 @@ export default {
      * @param {Event} event
      * @return {*} void
      */
-    async onIconFileSelected(event) {
+    onIconFileSelected(event) {
       const file = event.target.files && event.target.files[0]
       event.target.value = ''
-      if (!file)
-        return
+      if (file)
+        this.uploadIconFile(file)
+    },
 
+    /**
+     * @description: Paste an image directly (e.g. a screenshot, or a copied
+     * image from a browser) instead of picking a file or typing a URL.
+     * @param {ClipboardEvent} event
+     * @return {*} void
+     */
+    onIconPaste(event) {
+      const items = event.clipboardData && event.clipboardData.items
+      if (!items)
+        return
+      const imageItem = Array.from(items).find(item => item.type.startsWith('image/'))
+      if (!imageItem)
+        return
+      event.preventDefault()
+      const file = imageItem.getAsFile()
+      if (file)
+        this.uploadIconFile(file)
+    },
+
+    /**
+     * @description: Shared upload path for both the file-picker and paste
+     * icon inputs.
+     * @param {File|Blob} file
+     * @return {*} void
+     */
+    async uploadIconFile(file) {
       const storageRes = await this.$api.users.getCustomStorage('icon_storage_mountpoint')
       const mountpoint = storageRes.data.data && storageRes.data.data.mountpoint
       if (!mountpoint) {
@@ -341,7 +368,7 @@ export default {
       }
 
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', file, file.name || 'pasted-icon.png')
       formData.append('mountpoint', mountpoint)
 
       this.isUploadingIcon = true
@@ -901,10 +928,13 @@ export default {
                 <b-image :key="appIcon" :src="appIcon" :src-fallback="require('@/assets/img/app/default.svg')" class="is-32x32" ratio="1by1" />
               </span>
             </p>
-            <b-input v-model="configData['x-casaos'].icon" :placeholder="$t('Your custom icon URL')" expanded />
+            <b-input
+              v-model="configData['x-casaos'].icon" :placeholder="$t('Paste an image, or a URL')" expanded
+              @paste.native="onIconPaste"
+            />
             <p class="control">
               <input ref="iconFileInput" type="file" accept="image/*" class="is-hidden" @change="onIconFileSelected">
-              <b-button icon-left="paste-outline" icon-pack="casa" :loading="isUploadingIcon" @click="$refs.iconFileInput.click()">
+              <b-button icon-left="upload-outline" icon-pack="casa" :loading="isUploadingIcon" @click="$refs.iconFileInput.click()">
                 {{ $t('Upload') }}
               </b-button>
             </p>
