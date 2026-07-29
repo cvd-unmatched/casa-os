@@ -20,6 +20,14 @@ export default {
     folderColors() {
       return this.getFolderColors()
     },
+    isPresetColor() {
+      return !this.folder.color || this.folderColors.includes(this.folder.color)
+    },
+    customSwatchStyle() {
+      return this.folder.color && !this.isPresetColor
+        ? { background: this.folder.color }
+        : {}
+    },
     apps() {
       if (!this.folder)
         return []
@@ -101,6 +109,12 @@ export default {
         :class="{ selected: folder.color === color }" :style="{ background: color }"
         @click="pickColor(color)"
       />
+      <label
+        class="color-swatch custom-swatch" :class="{ selected: !isPresetColor }"
+        :style="customSwatchStyle" :title="$t('Custom color')"
+      >
+        <input type="color" class="color-input" :value="folder.color || '#909599'" @input="pickColor($event.target.value)">
+      </label>
     </div>
     <section class="modal-card-body">
       <div v-if="apps.length === 0" class="has-text-centered has-text-grey py-6">
@@ -135,6 +149,24 @@ export default {
 
     &.selected {
       border-color: hsla(208, 20%, 20%, 1);
+    }
+  }
+
+  .custom-swatch {
+    position: relative;
+    overflow: hidden;
+    background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+
+    .color-input {
+      position: absolute;
+      top: -25%;
+      left: -25%;
+      width: 150%;
+      height: 150%;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      opacity: 0;
     }
   }
 
