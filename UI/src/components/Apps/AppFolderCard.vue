@@ -12,14 +12,14 @@ export default {
     },
   },
   computed: {
-    previewStyle() {
+    tintStyle() {
       if (!this.folder.color)
         return {}
       const hex = this.folder.color.replace('#', '')
       const r = parseInt(hex.substring(0, 2), 16)
       const g = parseInt(hex.substring(2, 4), 16)
       const b = parseInt(hex.substring(4, 6), 16)
-      return { background: `rgba(${r}, ${g}, ${b}, 0.2)` }
+      return { backgroundColor: `rgba(${r}, ${g}, ${b}, 0.55)` }
     },
   },
   methods: {
@@ -35,10 +35,10 @@ export default {
     class="common-card is-flex is-align-items-center is-justify-content-center app-card app-folder-card"
     @click="open"
   >
-    <div class="blur-background" />
+    <div class="blur-background" :style="tintStyle" />
     <div class="cards-content">
       <div class="has-text-centered is-flex is-justify-content-center is-flex-direction-column pt-5 pb-3px img-c">
-        <div class="folder-preview is-64x64" :style="previewStyle">
+        <div class="folder-preview is-64x64">
           <div v-for="n in 4" :key="n" class="folder-preview-slot">
             <img v-if="previewApps[n - 1]" :src="previewApps[n - 1].icon" alt="">
           </div>
@@ -60,15 +60,11 @@ export default {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(2, 1fr);
-  gap: 2px;
-  padding: 6px;
-  border-radius: 8px;
-  background: rgba(144, 149, 153, 0.16);
-  box-sizing: border-box;
+  gap: 3px;
 }
 
 .folder-preview-slot {
-  border-radius: 3px;
+  border-radius: 4px;
   overflow: hidden;
   display: flex;
   align-items: center;
