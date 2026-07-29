@@ -76,6 +76,14 @@
 		transition: all 0.2s;
 		outline: none;
 		z-index: 20;
+
+		// :hover never fires reliably on touchscreens, so the per-app menu
+		// (open/settings/uninstall/move-to-folder) would otherwise be
+		// unreachable on phones and tablets.
+		@include touch {
+			visibility: visible;
+			opacity: 1;
+		}
 	}
 
 	.one-line {

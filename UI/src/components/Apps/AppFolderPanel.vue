@@ -1,0 +1,125 @@
+<script>
+import AppCard from './AppCard.vue'
+
+export default {
+  name: 'AppFolderPanel',
+  components: {
+    AppCard,
+  },
+  inject: ['getFolders', 'getAppList', 'renameFolder', 'deleteFolder'],
+  props: {
+    folderId: {
+      type: String,
+      required: true,
+    },
+  },
+  computed: {
+    folder() {
+      return this.getFolders().find(g => g.id === this.folderId)
+    },
+    apps() {
+      if (!this.folder)
+        return []
+      const names = this.folder.appNames
+      return this.getAppList().filter(item => names.includes(item.name))
+    },
+  },
+  watch: {
+    folder(value) {
+      // the folder was deleted (e.g. from another tab) while this panel was open
+      if (!value)
+        this.$emit('close')
+    },
+  },
+  methods: {
+    rename() {
+      this.$buefy.dialog.prompt({
+        message: this.$t('Folder name'),
+        inputAttrs: {
+          value: this.folder.name,
+          maxlength: 40,
+        },
+        trapFocus: true,
+        confirmText: this.$t('Save'),
+        onConfirm: (value) => {
+          if (value && value.trim())
+            this.renameFolder(this.folderId, value.trim())
+        },
+      })
+    },
+    confirmDelete() {
+      this.$buefy.dialog.confirm({
+        title: this.$t('Attention'),
+        message: this.$t('This only removes the folder. The apps inside it are not uninstalled.'),
+        type: 'is-dark',
+        confirmText: this.$t('Delete folder'),
+        cancelText: this.$t('Cancel'),
+        onConfirm: () => {
+          this.deleteFolder(this.folderId)
+          this.$emit('close')
+        },
+      })
+    },
+    onConfigApp(item, isCasa) {
+      this.$emit('configApp', item, isCasa)
+    },
+    onImportApp(item) {
+      this.$emit('importApp', item)
+    },
+    onUpdateState() {
+      this.$emit('updateState')
+    },
+  },
+}
+</script>
+
+<template>
+  <div v-if="folder" class="modal-card app-folder-panel">
+    <header class="modal-card-head is-flex is-align-items-center">
+      <p class="modal-card-title is-flex-grow-1">
+        {{ folder.name }}
+      </p>
+      <b-icon class="is-clickable mr-4" icon="folder-outline" pack="casa" @click.native="rename" />
+      <b-icon class="is-clickable mr-4" icon="trash-outline" pack="casa" @click.native="confirmDelete" />
+      <b-icon class="is-clickable" icon="close-outline" pack="casa" @click.native="$emit('close')" />
+    </header>
+    <section class="modal-card-body">
+      <div v-if="apps.length === 0" class="has-text-centered has-text-grey py-6">
+        {{ $t('This folder is empty. Move apps into it from their menu.') }}
+      </div>
+      <div v-else class="app-list contextmenu-canvas">
+        <div v-for="item in apps" :id="'folder-app-' + item.name" :key="'folder-app-' + item.name">
+          <app-card
+            :current-folder-id="folderId"
+            :item="item"
+            @configApp="onConfigApp"
+            @importApp="onImportApp"
+            @updateState="onUpdateState"
+          />
+        </div>
+      </div>
+    </section>
+  </div>
+</template>
+
+<style lang="scss" scoped>
+.app-folder-panel {
+  .modal-card-body {
+    min-height: 12rem;
+  }
+
+  .app-list {
+    position: relative;
+    display: grid;
+    gap: 1rem;
+
+    @include touch {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @include desktop {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+}
+</style>
