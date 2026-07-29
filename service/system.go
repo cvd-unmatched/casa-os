@@ -276,11 +276,12 @@ type DiskUsageInfo struct {
 // output but aren't real storage - not useful in a disk-usage widget.
 var pseudoFstypes = map[string]bool{
 	"tmpfs": true, "devtmpfs": true, "proc": true, "sysfs": true,
-	"cgroup": true, "cgroup2": true, "overlay": true, "squashfs": true,
+	"cgroup": true, "cgroup2": true, "overlay": true, "aufs": true, "squashfs": true,
 	"efivarfs": true, "devpts": true, "securityfs": true, "pstore": true,
 	"debugfs": true, "tracefs": true, "mqueue": true, "hugetlbfs": true,
 	"configfs": true, "fusectl": true, "bpf": true, "autofs": true,
 	"binfmt_misc": true, "rpc_pipefs": true, "nsfs": true,
+	"rootfs": true, "ramfs": true, "shm": true, "overlayfs": true,
 }
 
 // GetAllDisksUsage lists every real mounted filesystem with its usage, i.e.
@@ -289,7 +290,12 @@ var pseudoFstypes = map[string]bool{
 func (c *systemService) GetAllDisksUsage() []DiskUsageInfo {
 	result := []DiskUsageInfo{}
 
-	partitions, err := disk.Partitions(false)
+	// all=true: disk.Partitions(false) filters against /proc/filesystems,
+	// which can silently drop real mounted disks depending on which
+	// filesystem drivers happen to be loaded. Fetch everything and rely on
+	// pseudoFstypes below instead - that also has to catch Docker's
+	// per-container overlay mounts, so it needs to be reasonably complete.
+	partitions, err := disk.Partitions(true)
 	if err != nil {
 		return result
 	}
