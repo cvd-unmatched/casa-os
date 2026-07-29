@@ -89,6 +89,11 @@ const sys = {
 		return api.post(`${PREFIX}/update`);
 	},
 
+	// update from this fork's own repo (github.com/cvd-unmatched/casa-os)
+	updateFromRepo() {
+		return api.post(`${PREFIX}/update-fork`);
+	},
+
 	// stop casaos
 	stopCasaOS() {
 		return api.post(`${PREFIX}/stop`);

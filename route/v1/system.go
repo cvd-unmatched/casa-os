@@ -70,6 +70,18 @@ func SystemUpdate(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
 }
 
+// @Summary update from this fork's own repo (github.com/cvd-unmatched/casa-os)
+// @Produce  application/json
+// @Accept application/json
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/update-fork [post]
+func PostUpdateFromRepo(ctx echo.Context) error {
+	service.MyService.System().UpdateFromRepo()
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
+}
+
 // @Summary  get logs
 // @Produce  application/json
 // @Accept application/json
