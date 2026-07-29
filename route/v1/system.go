@@ -119,15 +119,27 @@ func GetAllDisksUsage(ctx echo.Context) error {
 // @Success 200 {string} string "ok"
 // @Router /sys/custom-icon [post]
 func PostCustomIcon(ctx echo.Context) error {
-	mountpoint := ctx.FormValue("mountpoint")
-	if mountpoint == "" {
-		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "mountpoint is required"})
+	// Parse the whole multipart form explicitly up front, rather than
+	// letting FormValue/FormFile each trigger (or re-trigger) parsing
+	// implicitly - a mountpoint value that the browser clearly sent but
+	// FormValue read back as empty pointed at something going wrong in
+	// per-field lazy parsing here.
+	form, err := ctx.MultipartForm()
+	if err != nil {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "invalid multipart form: " + err.Error()})
 	}
 
-	fileHeader, err := ctx.FormFile("file")
-	if err != nil {
+	mountpoints := form.Value["mountpoint"]
+	if len(mountpoints) == 0 || mountpoints[0] == "" {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "mountpoint is required"})
+	}
+	mountpoint := mountpoints[0]
+
+	files := form.File["file"]
+	if len(files) == 0 {
 		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "no file provided"})
 	}
+	fileHeader := files[0]
 
 	savedPath, err := service.MyService.System().SaveCustomIcon(mountpoint, fileHeader)
 	if err != nil {
