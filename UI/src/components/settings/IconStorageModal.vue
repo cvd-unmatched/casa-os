@@ -26,13 +26,25 @@ export default {
       this.selected = (configRes.data.data && configRes.data.data.mountpoint) || ''
       this.isLoading = false
     },
-    select(mountpoint) {
-      this.selected = mountpoint
-      this.$api.users.setCustomStorage(iconStorageConfig, { mountpoint })
-      this.$buefy.toast.open({
-        message: this.$t('Custom icons will be saved on {mountpoint}.', { mountpoint }),
-        type: 'is-success',
-      })
+    async select(mountpoint) {
+      try {
+        const res = await this.$api.users.setCustomStorage(iconStorageConfig, { mountpoint })
+        if (res.data.success !== 200)
+          throw new Error('save failed')
+        // reflect back whatever the server actually persisted, not just
+        // what we asked to save - if this doesn't match, something's off
+        this.selected = (res.data.data && res.data.data.mountpoint) || ''
+        this.$buefy.toast.open({
+          message: this.$t('Custom icons will be saved on {mountpoint}.', { mountpoint: this.selected }),
+          type: 'is-success',
+        })
+      }
+      catch (error) {
+        this.$buefy.toast.open({
+          message: this.$t('Failed to save icon storage setting.'),
+          type: 'is-danger',
+        })
+      }
     },
   },
 }
