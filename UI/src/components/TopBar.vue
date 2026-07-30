@@ -1006,7 +1006,7 @@ export default {
                 <b-icon class="ml-1" custom-size="mdi-18px" icon="check" type="is-success" />
               </template>
               <template v-else-if="forkUpdateInfo.need_update">
-                {{ $t('{version} available', { version: forkUpdateInfo.latest_version }) }} ({{ $t('currently') }} {{ forkUpdateInfo.current_version }})
+                {{ forkUpdateInfo.latest_version }} {{ $t('available') }} ({{ $t('currently') }} {{ forkUpdateInfo.current_version }})
               </template>
               <template v-else>
                 {{ forkUpdateInfo.current_version }}
