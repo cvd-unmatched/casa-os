@@ -60,10 +60,20 @@
 			window.__casaosShowBootError = showOverlay;
 
 			window.addEventListener('error', function (event) {
-				if (event.target && event.target !== window && (event.target.tagName === 'SCRIPT' || event.target.tagName === 'LINK')) {
-					showOverlay('CasaOS failed to load a required file', 'Could not load: ' + (event.target.src || event.target.href));
+				var target = event.target;
+				if (target && target !== window) {
+					// element-level resource failure (capture phase catches
+					// these) - only the JS bundle and its stylesheet are
+					// actually fatal to the app. Everything else (app icons,
+					// wallpaper, fonts, etc) fails harmlessly all the time
+					// and must not blank the whole page over it.
+					if (target.tagName === 'SCRIPT' || (target.tagName === 'LINK' && target.rel === 'stylesheet')) {
+						showOverlay('CasaOS failed to load a required file', 'Could not load: ' + (target.src || target.href));
+					}
 					return;
 				}
+				// no target (or target is window) means this is a genuine
+				// uncaught runtime error, not a resource load failure
 				showOverlay('CasaOS hit an error while starting', (event.error && event.error.stack) || event.message || String(event));
 			}, true);
 
