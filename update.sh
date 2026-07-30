@@ -4,9 +4,10 @@
 #
 # Usage: sudo ./update.sh
 #
-# Before running for the first time, verify BINARY_PATH and WWW_PATH below
-# actually match your install (see FORK.md for how to check). This script
-# refuses to run if either path doesn't already exist, rather than guessing.
+# Before running for the first time, verify BINARY_PATH, WWW_PATH, and
+# APP_MANAGEMENT_BINARY_PATH below actually match your install (see FORK.md
+# for how to check). This script refuses to run if any of them don't already
+# exist, rather than guessing.
 
 set -euo pipefail
 
@@ -14,6 +15,8 @@ REPO="cvd-unmatched/casa-os"
 SERVICE="casaos"
 BINARY_PATH="/usr/bin/casaos"
 WWW_PATH="/var/lib/casaos/www"
+APP_MANAGEMENT_SERVICE="casaos-app-management"
+APP_MANAGEMENT_BINARY_PATH="/usr/bin/casaos-app-management"
 BACKUP_ROOT="/mnt/mydata/casaos-backups/update.sh"
 
 if [[ $EUID -ne 0 ]]; then
@@ -30,6 +33,12 @@ fi
 if [[ ! -d "$WWW_PATH" ]]; then
   echo "Expected the current CasaOS web UI at $WWW_PATH but didn't find it." >&2
   echo "Edit WWW_PATH at the top of this script to match your install, then re-run." >&2
+  exit 1
+fi
+
+if [[ ! -f "$APP_MANAGEMENT_BINARY_PATH" ]]; then
+  echo "Expected the current CasaOS App Management binary at $APP_MANAGEMENT_BINARY_PATH but didn't find it." >&2
+  echo "Edit APP_MANAGEMENT_BINARY_PATH at the top of this script to match your install, then re-run." >&2
   exit 1
 fi
 
@@ -83,8 +92,8 @@ echo "==> Downloading $ASSET_URL"
 curl -fsSL -o "$WORK_DIR/casaos.tar.gz" "$ASSET_URL"
 tar -xzf "$WORK_DIR/casaos.tar.gz" -C "$WORK_DIR"
 
-if [[ ! -x "$WORK_DIR/casa" || ! -d "$WORK_DIR/www" ]]; then
-  echo "Downloaded archive didn't contain the expected casa binary + www directory." >&2
+if [[ ! -x "$WORK_DIR/casa" || ! -d "$WORK_DIR/www" || ! -x "$WORK_DIR/casaos-app-management" ]]; then
+  echo "Downloaded archive didn't contain the expected casa binary, casaos-app-management binary, and www directory." >&2
   exit 1
 fi
 
@@ -93,39 +102,49 @@ mkdir -p "$BACKUP_DIR"
 echo "==> Backing up current install to $BACKUP_DIR"
 cp -a "$BINARY_PATH" "$BACKUP_DIR/casa"
 cp -a "$WWW_PATH" "$BACKUP_DIR/www"
+cp -a "$APP_MANAGEMENT_BINARY_PATH" "$BACKUP_DIR/casaos-app-management"
 
-echo "==> Stopping $SERVICE"
-systemctl stop "$SERVICE"
-
-echo "==> Installing new binary + web UI"
-cp "$WORK_DIR/casa" "$BINARY_PATH"
-chmod +x "$BINARY_PATH"
-rm -rf "$WWW_PATH"
-cp -a "$WORK_DIR/www" "$WWW_PATH"
-
-echo "==> Starting $SERVICE"
-systemctl start "$SERVICE"
-sleep 2
-
-if systemctl is-active --quiet "$SERVICE"; then
-  echo "==> $SERVICE is running on $TAG."
-  echo "    Check the dashboard still loads and you can log in before assuming this is fine."
-else
-  echo "==> $SERVICE failed to start! Rolling back automatically." >&2
-  systemctl stop "$SERVICE" || true
+restore_backup() {
   cp "$BACKUP_DIR/casa" "$BINARY_PATH"
   chmod +x "$BINARY_PATH"
   rm -rf "$WWW_PATH"
   cp -a "$BACKUP_DIR/www" "$WWW_PATH"
-  systemctl start "$SERVICE"
-  echo "==> Rolled back to the previous version. Check 'journalctl -u $SERVICE -e' for what went wrong." >&2
+  cp "$BACKUP_DIR/casaos-app-management" "$APP_MANAGEMENT_BINARY_PATH"
+  chmod +x "$APP_MANAGEMENT_BINARY_PATH"
+}
+
+echo "==> Stopping $SERVICE and $APP_MANAGEMENT_SERVICE"
+systemctl stop "$SERVICE" "$APP_MANAGEMENT_SERVICE"
+
+echo "==> Installing new binaries + web UI"
+cp "$WORK_DIR/casa" "$BINARY_PATH"
+chmod +x "$BINARY_PATH"
+rm -rf "$WWW_PATH"
+cp -a "$WORK_DIR/www" "$WWW_PATH"
+cp "$WORK_DIR/casaos-app-management" "$APP_MANAGEMENT_BINARY_PATH"
+chmod +x "$APP_MANAGEMENT_BINARY_PATH"
+
+echo "==> Starting $SERVICE and $APP_MANAGEMENT_SERVICE"
+systemctl start "$SERVICE" "$APP_MANAGEMENT_SERVICE"
+sleep 2
+
+if systemctl is-active --quiet "$SERVICE" && systemctl is-active --quiet "$APP_MANAGEMENT_SERVICE"; then
+  echo "==> $SERVICE and $APP_MANAGEMENT_SERVICE are running on $TAG."
+  echo "    Check the dashboard still loads and you can log in before assuming this is fine."
+else
+  echo "==> One of the services failed to start! Rolling back automatically." >&2
+  systemctl stop "$SERVICE" "$APP_MANAGEMENT_SERVICE" || true
+  restore_backup
+  systemctl start "$SERVICE" "$APP_MANAGEMENT_SERVICE"
+  echo "==> Rolled back to the previous version. Check 'journalctl -u $SERVICE -e' and 'journalctl -u $APP_MANAGEMENT_SERVICE -e' for what went wrong." >&2
   exit 1
 fi
 
 echo ""
 echo "Backup of the previous version kept at: $BACKUP_DIR"
 echo "To roll back manually later:"
-echo "  sudo systemctl stop $SERVICE"
+echo "  sudo systemctl stop $SERVICE $APP_MANAGEMENT_SERVICE"
 echo "  sudo cp $BACKUP_DIR/casa $BINARY_PATH"
 echo "  sudo rm -rf $WWW_PATH && sudo cp -a $BACKUP_DIR/www $WWW_PATH"
-echo "  sudo systemctl start $SERVICE"
+echo "  sudo cp $BACKUP_DIR/casaos-app-management $APP_MANAGEMENT_BINARY_PATH"
+echo "  sudo systemctl start $SERVICE $APP_MANAGEMENT_SERVICE"
