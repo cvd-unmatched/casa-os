@@ -142,6 +142,7 @@ func main() {
 		"/v1/driver",
 		"/v1/cloud",
 		"/v1/recover",
+		"/v1/custom-icons",
 		"/v1/other",
 		"/v1/zt",
 		"/v1/test",
