@@ -38,6 +38,7 @@ github.com
 dist
 CasaOS
 /codegen
+/AppManagement/codegen
 
 # System Files
 .DS_Store
