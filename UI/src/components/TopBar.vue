@@ -307,7 +307,11 @@ export default {
 
       try {
         const appGrid = await this.$openAPI.appGrid.getAppGrid().then(res => res.data.data || [])
-        const composeApps = appGrid.filter(item => item.app_type !== 'v1app' && item.app_type !== 'container' && item.app_type !== 'LinkApp')
+        // v1app/container/LinkApp aren't compose apps at all, and an
+        // "uncontrolled" v2app is a plain Docker container CasaOS only
+        // discovered (not one it installed) - it has no real managed
+        // compose file for applyComposeAppSettings to write to, so it 500s.
+        const composeApps = appGrid.filter(item => item.app_type !== 'v1app' && item.app_type !== 'container' && item.app_type !== 'LinkApp' && !item.is_uncontrolled)
 
         for (const app of composeApps) {
           try {
@@ -329,7 +333,8 @@ export default {
             converted++
           }
           catch (error) {
-            console.error(`Failed to convert icon for ${app.name}:`, error)
+            const detail = error.response ? `${error.response.status}: ${JSON.stringify(error.response.data)}` : error.message
+            console.error(`Failed to convert icon for ${app.name}: ${detail}`)
             failed++
           }
         }
