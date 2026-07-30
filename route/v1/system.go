@@ -165,6 +165,39 @@ func GetCustomIcon(ctx echo.Context) error {
 	return ctx.File(resolved)
 }
 
+// @Summary download a remote icon url and save it as a local resized WebP
+// @Produce  application/json
+// @Accept application/json
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/custom-icon-from-url [post]
+func PostCustomIconFromURL(ctx echo.Context) error {
+	var body struct {
+		Mountpoint string `json:"mountpoint"`
+		URL        string `json:"url"`
+	}
+	if err := ctx.Bind(&body); err != nil {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "invalid request body: " + err.Error()})
+	}
+	if body.Mountpoint == "" {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "mountpoint is required"})
+	}
+	if body.URL == "" {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "url is required"})
+	}
+
+	savedPath, err := service.MyService.System().SaveCustomIconFromURL(body.Mountpoint, body.URL)
+	if err != nil {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
+
+	data := map[string]string{
+		"url": "/v1/custom-icons?path=" + url.QueryEscape(savedPath),
+	}
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: data})
+}
+
 // @Summary  get logs
 // @Produce  application/json
 // @Accept application/json
