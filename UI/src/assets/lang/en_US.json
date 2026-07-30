@@ -163,6 +163,7 @@
   "Existing Docker Apps": "Existing Docker apps",
   "[Optional]": "Optional",
   "Notice: If there are multiple services, only the first set can be analyzed correctly": "When there are more than 1 containers specified in the Docker compose file, only the first one will be imported for now.",
+  "Paste your docker-compose.yml here. Every service will be imported.": "Paste your docker-compose.yml here. Every service will be imported.",
   "There was an error loading the data, please try again!": "There was an error loading the data. Please try again.",
   "Port": "Ports",
   "Create Storage": "Create Storage",
