@@ -1,9 +1,14 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"mime/multipart"
 	net2 "net"
@@ -25,9 +30,12 @@ import (
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/common_err"
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/httper"
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/ip_helper"
+	"github.com/chai2010/webp"
+	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
+	_ "golang.org/x/image/webp"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -363,6 +371,30 @@ func (c *systemService) isMountedDisk(mountpoint string) bool {
 	return false
 }
 
+// maxIconDimension is the max width/height a saved icon is resized to -
+// imaging.Fit only ever scales down, so a smaller source image is left as-is.
+const maxIconDimension = 256
+
+// resizeAndEncodeWebP decodes any supported raster format (PNG/JPEG/GIF/WebP),
+// downscales it to fit maxIconDimension, and re-encodes it as WebP. This is
+// what keeps custom icons small and fast to load regardless of what the
+// original upload looked like.
+func resizeAndEncodeWebP(src io.Reader) ([]byte, error) {
+	img, _, err := image.Decode(src)
+	if err != nil {
+		return nil, fmt.Errorf("could not decode image: %w", err)
+	}
+
+	resized := imaging.Fit(img, maxIconDimension, maxIconDimension, imaging.Lanczos)
+
+	var buf bytes.Buffer
+	if err := webp.Encode(&buf, resized, &webp.Options{Quality: 85}); err != nil {
+		return nil, fmt.Errorf("could not encode webp: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
 func (c *systemService) SaveCustomIcon(mountpoint string, fileHeader *multipart.FileHeader) (string, error) {
 	if !c.isMountedDisk(mountpoint) {
 		return "", fmt.Errorf("%s is not a currently mounted disk", mountpoint)
@@ -389,15 +421,31 @@ func (c *systemService) SaveCustomIcon(mountpoint string, fileHeader *multipart.
 		return "", err
 	}
 
-	destPath := filepath.Join(dir, uuid.NewString()+ext)
-	dest, err := os.Create(destPath)
+	// SVG is already small and vector - converting it to a raster WebP would
+	// be a downgrade, so it's saved through untouched.
+	if ext == ".svg" {
+		destPath := filepath.Join(dir, uuid.NewString()+ext)
+		dest, err := os.Create(destPath)
+		if err != nil {
+			return "", err
+		}
+		defer dest.Close()
+
+		if _, err := io.Copy(dest, src); err != nil {
+			os.Remove(destPath)
+			return "", err
+		}
+
+		return destPath, nil
+	}
+
+	webpData, err := resizeAndEncodeWebP(src)
 	if err != nil {
 		return "", err
 	}
-	defer dest.Close()
 
-	if _, err := io.Copy(dest, src); err != nil {
-		os.Remove(destPath)
+	destPath := filepath.Join(dir, uuid.NewString()+".webp")
+	if err := os.WriteFile(destPath, webpData, 0o644); err != nil {
 		return "", err
 	}
 
