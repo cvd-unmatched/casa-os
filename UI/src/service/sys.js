@@ -116,6 +116,14 @@ const sys = {
 		});
 	},
 
+	// have the server download a remote icon url and save it as a local
+	// resized WebP on the given disk - used by the bulk "convert all icons
+	// to local WebP" button, so apps can be migrated without the browser
+	// having to fetch and re-upload every icon itself.
+	convertIconFromUrl(mountpoint, url) {
+		return api.post(`${PREFIX}/custom-icon-from-url`, { mountpoint, url });
+	},
+
 	// stop casaos
 	stopCasaOS() {
 		return api.post(`${PREFIX}/stop`);

@@ -6,6 +6,7 @@ import UpdateModal from './settings/UpdateModal.vue'
 import IconStorageModal from './settings/IconStorageModal.vue'
 import { mixin } from '@/mixins/mixin'
 import messages from '@/assets/lang'
+import YAML from 'yaml'
 
 import events from '@/events/events'
 
@@ -53,6 +54,7 @@ export default {
       },
       latestText: 'Currently at the latest version',
       updateText: 'A new version is available!',
+      isConvertingIcons: false,
 
       port: '',
       autoUsbMount: false,
@@ -264,6 +266,82 @@ export default {
         canCancel: ['escape', 'outside'],
         scroll: 'keep',
         animation: 'zoom-in',
+      })
+    },
+
+    confirmConvertAllIconsToWebP() {
+      this.$refs.settingsDrop.toggle()
+      this.$buefy.dialog.confirm({
+        title: this.$t('Convert all icons to local WebP'),
+        message: this.$t('This downloads every installed app\'s current icon, resizes it, and saves it as a local WebP file on the configured icon storage disk. It may take a while and cannot be undone. Continue?'),
+        confirmText: this.$t('Convert'),
+        cancelText: this.$t('Cancel'),
+        type: 'is-dark',
+        onConfirm: () => this.convertAllIconsToWebP(),
+      })
+    },
+
+    /**
+     * @description: Migrate every installed compose app's current (usually
+     * remote) icon to a locally-stored, resized WebP file on the configured
+     * icon storage disk, updating each app's saved compose config with the
+     * new local url. Runs unattended - one button, all apps, no per-app
+     * review - and skips anything whose icon is already local.
+     */
+    async convertAllIconsToWebP() {
+      const storageRes = await this.$api.users.getCustomStorage('icon_storage_mountpoint')
+      const mountpoint = storageRes.data.data && storageRes.data.data.mountpoint
+      if (!mountpoint) {
+        this.$buefy.toast.open({
+          message: this.$t('Set an icon storage disk first (Settings > Icon Storage Disk).'),
+          type: 'is-warning',
+        })
+        return
+      }
+
+      this.isConvertingIcons = true
+
+      let converted = 0
+      let skipped = 0
+      let failed = 0
+
+      try {
+        const appGrid = await this.$openAPI.appGrid.getAppGrid().then(res => res.data.data || [])
+        const composeApps = appGrid.filter(item => item.app_type !== 'v1app' && item.app_type !== 'container' && item.app_type !== 'LinkApp')
+
+        for (const app of composeApps) {
+          try {
+            const yamlRes = await this.$openAPI.appManagement.compose.myComposeApp(app.name, {
+              headers: { 'content-type': 'application/yaml', accept: 'application/yaml' },
+            })
+            const composeData = YAML.parse(yamlRes.data)
+            const icon = composeData?.['x-casaos']?.icon
+
+            if (!icon || icon.includes('/v1/custom-icons')) {
+              skipped++
+              continue
+            }
+
+            const convertRes = await this.$api.sys.convertIconFromUrl(mountpoint, icon)
+            composeData['x-casaos'].icon = convertRes.data.data.url
+
+            await this.$openAPI.appManagement.compose.applyComposeAppSettings(app.name, YAML.stringify(composeData), false, true)
+            converted++
+          }
+          catch (error) {
+            console.error(`Failed to convert icon for ${app.name}:`, error)
+            failed++
+          }
+        }
+      }
+      finally {
+        this.isConvertingIcons = false
+      }
+
+      this.$buefy.toast.open({
+        message: this.$t('Icon conversion done: {converted} converted, {skipped} already local, {failed} failed', { converted, skipped, failed }),
+        type: failed > 0 ? 'is-warning' : 'is-success',
+        duration: 6000,
       })
     },
 
@@ -757,6 +835,25 @@ export default {
             </div>
           </div>
           <!-- Icon Storage End -->
+
+          <!-- Convert Icons to WebP Start -->
+          <div
+            class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
+          >
+            <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+              <b-icon class="mr-1 ml-2" icon="picture-upload-outline" pack="casa" size="is-20" />
+              {{ $t("Convert all icons to local WebP") }}
+            </div>
+            <div class="ml-2">
+              <b-button
+                rounded size="is-small" type="is-dark" :loading="isConvertingIcons"
+                :disabled="isConvertingIcons" @click="confirmConvertAllIconsToWebP"
+              >
+                {{ $t("Convert") }}
+              </b-button>
+            </div>
+          </div>
+          <!-- Convert Icons to WebP End -->
 
           <!--  Show other Docker container app(s) Switch Start  -->
           <div

@@ -75,6 +75,7 @@ func InitV1Router() http.Handler {
 			v1SysGroup.GET("/hardware", v1.GetSystemHardwareInfo) // hardware/info
 			v1SysGroup.GET("/disks-usage", v1.GetAllDisksUsage)
 			v1SysGroup.POST("/custom-icon", v1.PostCustomIcon)
+			v1SysGroup.POST("/custom-icon-from-url", v1.PostCustomIconFromURL)
 
 			v1SysGroup.GET("/wsssh", v1.WsSsh)
 			v1SysGroup.POST("/ssh-login", v1.PostSshLogin)

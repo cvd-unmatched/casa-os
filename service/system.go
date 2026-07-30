@@ -12,6 +12,8 @@ import (
 	"io"
 	"mime/multipart"
 	net2 "net"
+	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,6 +69,7 @@ type SystemService interface {
 	GetDiskInfo() *disk.UsageStat
 	GetAllDisksUsage() []DiskUsageInfo
 	SaveCustomIcon(mountpoint string, fileHeader *multipart.FileHeader) (string, error)
+	SaveCustomIconFromURL(mountpoint string, sourceURL string) (string, error)
 	ResolveCustomIconPath(requestedPath string) (string, error)
 	GetSysInfo() host.InfoStat
 	GetDeviceTree() string
@@ -396,10 +399,6 @@ func resizeAndEncodeWebP(src io.Reader) ([]byte, error) {
 }
 
 func (c *systemService) SaveCustomIcon(mountpoint string, fileHeader *multipart.FileHeader) (string, error) {
-	if !c.isMountedDisk(mountpoint) {
-		return "", fmt.Errorf("%s is not a currently mounted disk", mountpoint)
-	}
-
 	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 	if !allowedIconExt[ext] {
 		return "", fmt.Errorf("unsupported icon file type: %s", ext)
@@ -416,13 +415,85 @@ func (c *systemService) SaveCustomIcon(mountpoint string, fileHeader *multipart.
 	}
 	defer src.Close()
 
+	return c.saveIconFromReader(mountpoint, ext, src)
+}
+
+// maxIconDownloadSize caps how much of a remote icon URL is read into memory
+// - used by the bulk "convert existing icons to local WebP" feature, which
+// has the server (not the browser) fetch each app's current icon URL.
+const maxIconDownloadSize = 10 * 1024 * 1024 // 10MB
+
+// SaveCustomIconFromURL downloads sourceURL and saves it the same way an
+// uploaded icon file would be saved (resized + re-encoded to WebP, except
+// SVG which is kept as-is).
+func (c *systemService) SaveCustomIconFromURL(mountpoint string, sourceURL string) (string, error) {
+	parsed, err := neturl.Parse(sourceURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", fmt.Errorf("icon url must be http or https")
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(sourceURL)
+	if err != nil {
+		return "", fmt.Errorf("could not fetch icon url: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("fetching icon url returned status %d", resp.StatusCode)
+	}
+
+	limited := io.LimitReader(resp.Body, maxIconDownloadSize+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return "", fmt.Errorf("could not read icon url response: %w", err)
+	}
+	if len(data) > maxIconDownloadSize {
+		return "", fmt.Errorf("icon file too large (max %dMB)", maxIconDownloadSize/1024/1024)
+	}
+
+	ext := strings.ToLower(filepath.Ext(parsed.Path))
+	if !allowedIconExt[ext] {
+		// fall back to sniffing the content, most icon URLs (e.g. dockerhub/
+		// icon.casaos.io) don't carry a recognizable extension in the path
+		contentType := http.DetectContentType(data)
+		switch {
+		case strings.Contains(contentType, "svg"):
+			ext = ".svg"
+		case strings.Contains(contentType, "png"):
+			ext = ".png"
+		case strings.Contains(contentType, "gif"):
+			ext = ".gif"
+		case strings.Contains(contentType, "webp"):
+			ext = ".webp"
+		case strings.Contains(contentType, "jpeg"):
+			ext = ".jpg"
+		default:
+			return "", fmt.Errorf("unsupported icon content type: %s", contentType)
+		}
+	}
+
+	return c.saveIconFromReader(mountpoint, ext, bytes.NewReader(data))
+}
+
+// saveIconFromReader is the shared save path for both an uploaded icon file
+// and a downloaded icon URL: validate the disk, resize+re-encode to WebP
+// (SVG kept as-is since it's already small and vector), and write it under
+// customIconSubdir on the chosen disk.
+func (c *systemService) saveIconFromReader(mountpoint string, ext string, src io.Reader) (string, error) {
+	if !c.isMountedDisk(mountpoint) {
+		return "", fmt.Errorf("%s is not a currently mounted disk", mountpoint)
+	}
+
+	if !allowedIconExt[ext] {
+		return "", fmt.Errorf("unsupported icon file type: %s", ext)
+	}
+
 	dir := filepath.Join(mountpoint, customIconSubdir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 
-	// SVG is already small and vector - converting it to a raster WebP would
-	// be a downgrade, so it's saved through untouched.
 	if ext == ".svg" {
 		destPath := filepath.Join(dir, uuid.NewString()+ext)
 		dest, err := os.Create(destPath)
