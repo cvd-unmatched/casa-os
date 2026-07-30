@@ -160,7 +160,10 @@ func PostCustomIcon(ctx echo.Context) error {
 func GetCustomIcon(ctx echo.Context) error {
 	resolved, err := service.MyService.System().ResolveCustomIconPath(ctx.QueryParam("path"))
 	if err != nil {
-		return ctx.NoContent(http.StatusNotFound)
+		// Temporarily returning the specific reason as JSON (instead of a
+		// bare 404) while tracking down why this fails for real uploaded
+		// files - remove once confirmed working.
+		return ctx.JSON(http.StatusNotFound, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
 	}
 	return ctx.File(resolved)
 }
