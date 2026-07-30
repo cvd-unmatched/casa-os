@@ -50,6 +50,16 @@ Vue.use(VueDOMPurifyHTML, {
 });
 
 Vue.config.productionTip = false
+// Vue normally just console.errors a component error and carries on with a
+// blank/partial render - route it through the same on-screen overlay index.html
+// installs for boot-time errors, so a failure is visible/reportable on-device
+// instead of silently leaving a blank screen with nothing to go on.
+Vue.config.errorHandler = function (err, vm, info) {
+	console.error(err, info)
+	if (window.__casaosShowBootError) {
+		window.__casaosShowBootError('CasaOS hit an error', (err && err.stack) || String(err))
+	}
+}
 Vue.prototype.$api = api;
 Vue.prototype.$openAPI = openAPI;
 Vue.prototype.$baseIp = baseIp;

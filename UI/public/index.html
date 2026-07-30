@@ -24,6 +24,62 @@
 			Please enable it to continue.</strong>
 	</noscript>
 	<div id="app"></div>
+	<script type="text/javascript">
+		// Diagnostic overlay for the mobile-only "white screen" reports: on
+		// some phones the app never mounts and nothing is visible or
+		// reportable, with no way to plug in a desktop devtools session to
+		// see why. This runs before the Vue bundle and needs no build step
+		// or dependency, so it still fires even if the bundle itself fails
+		// to load or throws during evaluation - it shows the actual error
+		// on screen (instead of a blank page) and a "still loading" notice
+		// if the app hasn't mounted after a few seconds, so a failure can
+		// actually be read/reported instead of just being a blank page.
+		(function () {
+			var shown = false;
+			function showOverlay(title, detail) {
+				if (shown || document.getElementById('boot-error-overlay')) return;
+				shown = true;
+				var el = document.createElement('div');
+				el.id = 'boot-error-overlay';
+				el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#1a1a1a;color:#fff;' +
+					'font:14px/1.5 -apple-system,BlinkMacSystemFont,sans-serif;padding:20px;overflow:auto;' +
+					'white-space:pre-wrap;word-break:break-word;';
+				var strong = document.createElement('strong');
+				strong.textContent = title;
+				strong.style.cssText = 'display:block;margin-bottom:10px;color:#ff6b6b;font-size:16px;';
+				var pre = document.createElement('div');
+				pre.textContent = detail || '';
+				el.appendChild(strong);
+				el.appendChild(pre);
+				document.body.appendChild(el);
+			}
+
+			// exposed so main.js can route Vue's own errorHandler through the
+			// same on-screen overlay, since Vue swallows component errors
+			// rather than letting them reach window.onerror
+			window.__casaosShowBootError = showOverlay;
+
+			window.addEventListener('error', function (event) {
+				if (event.target && event.target !== window && (event.target.tagName === 'SCRIPT' || event.target.tagName === 'LINK')) {
+					showOverlay('CasaOS failed to load a required file', 'Could not load: ' + (event.target.src || event.target.href));
+					return;
+				}
+				showOverlay('CasaOS hit an error while starting', (event.error && event.error.stack) || event.message || String(event));
+			}, true);
+
+			window.addEventListener('unhandledrejection', function (event) {
+				var reason = event.reason;
+				showOverlay('CasaOS hit an error while starting', (reason && reason.stack) || (reason && reason.message) || String(reason));
+			});
+
+			setTimeout(function () {
+				var appEl = document.getElementById('app');
+				if (!shown && appEl && appEl.childElementCount === 0) {
+					showOverlay('CasaOS is taking longer than expected to load', 'No script error was caught, so this is likely a network or caching issue - try a hard refresh, or reloading with cache disabled.');
+				}
+			}, 8000);
+		})();
+	</script>
 	<!-- built files will be auto injected -->
 	<script type="text/javascript" src="<%= BASE_URL %>js/custom.js"></script>
 </body>
