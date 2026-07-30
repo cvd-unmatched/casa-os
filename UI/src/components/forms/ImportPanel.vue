@@ -187,7 +187,7 @@ export default {
       <b-tabs v-model="activeTab" :animated="false">
         <b-tab-item label="Docker Compose">
           <b-field :message="errors" :type="{ 'is-danger': !!errors }">
-            <b-input v-model="dockerComposeCommands" :placeholder="$t('Notice: If there are multiple services, only the first set can be analyzed correctly')" class="import-area" type="textarea" />
+            <b-input v-model="dockerComposeCommands" :placeholder="$t('Paste your docker-compose.yml here. Every service will be imported.')" class="import-area" type="textarea" />
           </b-field>
 
           <b-upload ref="importUpload" v-model="dropFiles" accept=".yaml,.yml" drag-drop expanded @input="onSelect">
