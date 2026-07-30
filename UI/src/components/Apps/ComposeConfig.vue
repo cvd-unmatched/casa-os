@@ -318,6 +318,21 @@ export default {
     },
 
     /**
+     * @description: Open the hidden file input for icon upload. Vue turns a
+     * `ref` declared inside a v-for (this input lives inside the per-service
+     * b-tab-item loop, even though only one tab's copy ever renders) into an
+     * array of elements rather than a single element, so $refs.iconFileInput
+     * can't be clicked directly.
+     * @return {*} void
+     */
+    openIconFilePicker() {
+      const ref = this.$refs.iconFileInput
+      const input = Array.isArray(ref) ? ref[0] : ref
+      if (input)
+        input.click()
+    },
+
+    /**
      * @description: Upload a local icon file instead of typing a URL. Saved
      * server-side under a casaos-custom-icons folder on whichever disk is
      * configured in Settings > Icon Storage Disk.
@@ -934,7 +949,7 @@ export default {
             />
             <p class="control">
               <input ref="iconFileInput" type="file" accept="image/*" class="is-hidden" @change="onIconFileSelected">
-              <b-button class="icon-upload-btn" icon-left="upload-outline" icon-pack="casa" :loading="isUploadingIcon" @click="$refs.iconFileInput.click()">
+              <b-button class="icon-upload-btn" icon-left="upload-outline" icon-pack="casa" :loading="isUploadingIcon" @click="openIconFilePicker">
                 {{ $t('Upload') }}
               </b-button>
             </p>
