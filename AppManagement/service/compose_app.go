@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -654,6 +655,19 @@ func (a *ComposeApp) Apply(ctx context.Context, newComposeYAML []byte) error {
 		logger.Info("warning: multiple compose files found, only the first one will be used", zap.String("compose files", strings.Join(a.ComposeFiles, ",")))
 	}
 
+	// If nothing outside x-casaos metadata (icon, title, etc.) actually
+	// changed, there's nothing for Docker to do - skip pulling images and
+	// calling compose Up entirely, rather than relying on compose-go's own
+	// config-hash diffing to correctly no-op. That diffing compares the
+	// *resolved* project (defaults filled in, paths resolved against a
+	// throwaway temp working dir from NewComposeAppFromYAML), which can
+	// differ from the already-running container's resolved config in ways
+	// that have nothing to do with any real change, causing an unnecessary
+	// recreate on a metadata-only save like an icon edit.
+	if currentYAML, err := os.ReadFile(a.ComposeFiles[0]); err == nil && hasOnlyMetadataChanges(currentYAML, newComposeYAML) {
+		return file.WriteToFullPath(newComposeYAML, a.ComposeFiles[0], 0o600)
+	}
+
 	// prepare for message bus events
 	eventProperties := common.PropertiesFromContext(ctx)
 	eventProperties[common.PropertyTypeAppName.Name] = a.Name
@@ -1049,6 +1063,40 @@ func getNameFrom(composeYAML []byte) string {
 	}
 
 	return baseStructure.Name
+}
+
+// hasOnlyMetadataChanges reports whether oldYAML and newYAML are identical
+// once every top-level x-* extension key (x-casaos, etc. - CasaOS-only
+// metadata like icon/title, not real docker config) is stripped out. It
+// compares the raw parsed YAML directly, before compose-go's loader ever
+// resolves defaults/paths, so it can't be thrown off by anything the loader
+// itself introduces (like NewComposeAppFromYAML's throwaway temp working
+// dir) - it only answers "would Docker see any different service, network,
+// or volume definition here".
+func hasOnlyMetadataChanges(oldYAML, newYAML []byte) bool {
+	strip := func(raw []byte) (map[string]interface{}, bool) {
+		var m map[string]interface{}
+		if err := yaml.Unmarshal(raw, &m); err != nil {
+			return nil, false
+		}
+		for key := range m {
+			if strings.HasPrefix(key, "x-") {
+				delete(m, key)
+			}
+		}
+		return m, true
+	}
+
+	oldStripped, ok := strip(oldYAML)
+	if !ok {
+		return false
+	}
+	newStripped, ok := strip(newYAML)
+	if !ok {
+		return false
+	}
+
+	return reflect.DeepEqual(oldStripped, newStripped)
 }
 
 func (a *ComposeApp) SetUncontrolled(uncontrolled bool) error {
