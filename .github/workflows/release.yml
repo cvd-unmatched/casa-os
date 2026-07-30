@@ -38,18 +38,27 @@ jobs:
           path: UI/build/sysroot/var/lib/casaos/www
 
   build-backend:
+    # Native per-arch runners, not cross-compilation: icon uploads encode to
+    # WebP via github.com/chai2010/webp, which needs CGO + libwebp - far
+    # simpler to build natively on a matching runner than to cross-compile
+    # CGO with a cross C toolchain + cross libwebp for arm64.
     strategy:
       matrix:
-        arch: [amd64, arm64]
-    runs-on: ubuntu-latest
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y libwebp-dev
       - run: go generate ./...
       - env:
-          CGO_ENABLED: "0"
+          CGO_ENABLED: "1"
           GOOS: linux
           GOARCH: ${{ matrix.arch }}
         run: |
