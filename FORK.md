@@ -1,13 +1,21 @@
 # About this fork
 
-This repository is a personal fork combining two upstream projects, both licensed
-under Apache License 2.0:
+This repository is a personal fork combining three upstream projects, all
+licensed under Apache License 2.0:
 
-- [IceWhaleTech/CasaOS](https://github.com/IceWhaleTech/CasaOS) (backend), forked
-  from `main` at commit `0d3b2f444ec0193193cf03eef6d43c6e35b0183e`.
+- [IceWhaleTech/CasaOS](https://github.com/IceWhaleTech/CasaOS) (main backend,
+  `casaos` service), forked from `main` at commit
+  `0d3b2f444ec0193193cf03eef6d43c6e35b0183e`.
 - [IceWhaleTech/CasaOS-UI](https://github.com/IceWhaleTech/CasaOS-UI) (frontend),
-  vendored into [`UI/`](UI/) as plain files instead of a git submodule so both
-  live in one repository.
+  vendored into [`UI/`](UI/) as plain files instead of a git submodule.
+- [IceWhaleTech/CasaOS-AppManagement](https://github.com/IceWhaleTech/CasaOS-AppManagement)
+  (`casaos-app-management` service - actually applies compose changes and
+  manages containers), vendored into [`AppManagement/`](AppManagement/) at
+  commit `debfa317f0f996b91b43210e8d57799461388704`.
+
+All three live in this one repository as plain subdirectories, each still its
+own Go module (`AppManagement/` has its own `go.mod`) or npm project (`UI/`),
+built as separate artifacts by the same release workflow.
 
 All credit for the original design and implementation goes to the CasaOS
 authors and contributors. See [LICENSE](LICENSE) for the full license text.
@@ -25,26 +33,33 @@ authors and contributors. See [LICENSE](LICENSE) for the full license text.
   (which checks IceWhale's own api.casaos.io) never thinks an official update
   is available - that update path would `curl | bash` IceWhale's installer as
   root and overwrite this fork. Use `update.sh` instead (below).
+- Fixed changing an app's icon recreating its containers: `AppManagement`
+  used to bake the icon into every service's Docker labels purely so an old
+  stats-polling loop could read it back, but Compose treats labels as part of
+  a service's config, so any icon-only edit looked like a real config change.
 
 ## Updating a running install from this repo
 
 Pushing a tag like `v1.2.3` runs [`.github/workflows/release.yml`](.github/workflows/release.yml),
-which builds the backend (linux/amd64 + linux/arm64) and the UI, and attaches
-`casaos-linux-amd64.tar.gz` / `casaos-linux-arm64.tar.gz` to a GitHub Release
-on this repo.
+which builds both backends (linux/amd64 + linux/arm64) and the UI, and
+attaches `casaos-linux-amd64.tar.gz` / `casaos-linux-arm64.tar.gz` (each
+containing `casa`, `casaos-app-management`, and `www`) to a GitHub Release on
+this repo.
 
 [`update.sh`](update.sh) (run on the server, as root) downloads the release
-matching the server's architecture, **backs up the current binary and web UI
-first**, swaps them in, restarts the `casaos` service, and automatically rolls
-back if the service fails to come back up.
+matching the server's architecture, **backs up the current binaries and web UI
+first**, swaps them in, restarts the `casaos` and `casaos-app-management`
+services, and automatically rolls both back if either service fails to come
+back up.
 
-Before running it for the first time, confirm the two paths at the top of the
+Before running it for the first time, confirm the paths at the top of the
 script actually match your install:
 
 ```bash
-systemctl cat casaos            # confirms the binary path (ExecStart=...)
+systemctl cat casaos                       # confirms the main binary path (ExecStart=...)
+systemctl cat casaos-app-management        # confirms the app-management binary path
 sudo find /var/lib/casaos /usr/share/casaos -maxdepth 3 -iname index.html
-                                 # confirms where the web UI static files live
+                                            # confirms where the web UI static files live
 ```
 
 Then:

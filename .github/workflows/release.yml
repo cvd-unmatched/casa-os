@@ -59,8 +59,32 @@ jobs:
           name: casa-linux-${{ matrix.arch }}
           path: casa
 
+  build-app-management:
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: AppManagement/go.mod
+      - run: go generate ./...
+        working-directory: AppManagement
+      - env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          go build -ldflags "-s -w" -o casaos-app-management main.go
+        working-directory: AppManagement
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-management-linux-${{ matrix.arch }}
+          path: AppManagement/casaos-app-management
+
   package-and-release:
-    needs: [build-ui, build-backend]
+    needs: [build-ui, build-backend, build-app-management]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -74,8 +98,10 @@ jobs:
             mkdir -p "$dir/www"
             cp "artifacts/casa-linux-$arch/casa" "$dir/casa"
             chmod +x "$dir/casa"
+            cp "artifacts/app-management-linux-$arch/casaos-app-management" "$dir/casaos-app-management"
+            chmod +x "$dir/casaos-app-management"
             cp -r artifacts/www/. "$dir/www/"
-            tar -czf "casaos-linux-$arch.tar.gz" -C "$dir" casa www
+            tar -czf "casaos-linux-$arch.tar.gz" -C "$dir" casa casaos-app-management www
           done
           sha256sum casaos-linux-*.tar.gz > checksums.txt
       - uses: softprops/action-gh-release@v2
