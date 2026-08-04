@@ -16,7 +16,7 @@ export default {
     CTooltip: cTooltip,
   },
   mixins: [business_ShowNewAppTag, business_OpenThirdApp, business_LinkApp, commonI18n],
-  inject: ['homeShowFiles', 'openAppStore', 'getFolders', 'moveAppToFolder', 'removeAppFromFolder', 'createFolder'],
+  inject: ['homeShowFiles', 'openAppStore', 'getFolders', 'moveAppToFolder', 'removeAppFromFolder', 'createFolder', 'getPublicUrl', 'setPublicUrl'],
   props: {
     item: {
       type: Object,
@@ -105,6 +105,9 @@ export default {
     isLinkApp() {
       return this.item.app_type === 'LinkApp'
     },
+    publicUrl() {
+      return this.getPublicUrl(this.item.name)
+    },
     shutDownClass() {
       return this.item.status !== 'running' ? 'shutdown-rounded' : ''
     },
@@ -190,6 +193,30 @@ export default {
         default:
           break
       }
+    },
+
+    /**
+     * @description: Add/edit the note-to-self url this app is reachable at
+     * externally (e.g. a Cloudflare Tunnel hostname) - not part of the app's
+     * own config, just a per-user reminder of "which url did I give this one".
+     * @return {*} void
+     */
+    promptPublicUrl() {
+      this.$buefy.dialog.prompt({
+        message: this.$t('Public URL'),
+        inputAttrs: {
+          type: 'url',
+          placeholder: this.$t('e.g. https://app.example.com'),
+          value: this.publicUrl,
+        },
+        trapFocus: true,
+        confirmText: this.$t('Save'),
+        onConfirm: (value) => this.setPublicUrl(this.item.name, value),
+      })
+    },
+
+    openPublicUrl() {
+      if (this.publicUrl) window.open(this.publicUrl, '_blank')
     },
 
     /**
@@ -764,6 +791,13 @@ export default {
             {{
               $t('Setting')
             }}
+          </b-button>
+
+          <b-button v-if="(isV2App || isV1App || isContainerApp) && publicUrl" expanded type="is-text" @click="openPublicUrl">
+            {{ $t('Open public URL') }}
+          </b-button>
+          <b-button v-if="isV2App || isV1App || isContainerApp" expanded type="is-text" @click="promptPublicUrl">
+            {{ publicUrl ? $t('Edit public URL') : $t('Add public URL') }}
           </b-button>
 
           <b-button v-if="isV2App && !item.is_uncontrolled" expanded type="is-text" @click="checkAppVersion(item.name)">

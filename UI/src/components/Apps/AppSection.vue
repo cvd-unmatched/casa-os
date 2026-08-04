@@ -157,6 +157,7 @@ const builtInApplications = [
 const orderConfig = 'app_order'
 const groupsConfig = 'app_groups'
 const displayOrderConfig = 'app_display_order'
+const publicUrlsConfig = 'app_public_urls'
 
 const FOLDER_COLORS = ['#5B8DEF', '#61C454', '#F2994A', '#EB5757', '#9B51E0', '#2D9CDB', '#F2C94C', '#56CCF2']
 
@@ -180,7 +181,8 @@ export default {
 			ListRefreshTimer: null,
 			groups: [],
 			displayList: [],
-			displayOrder: []
+			displayOrder: [],
+			publicUrls: {}
 		}
 	},
 	components: {
@@ -201,7 +203,9 @@ export default {
 			changeFolderColor: this.changeFolderColor,
 			deleteFolder: this.deleteFolder,
 			moveAppToFolder: this.moveAppToFolder,
-			removeAppFromFolder: this.removeAppFromFolder
+			removeAppFromFolder: this.removeAppFromFolder,
+			getPublicUrl: appName => this.publicUrls[appName] || '',
+			setPublicUrl: this.setPublicUrl
 		}
 	},
 	computed: {
@@ -221,6 +225,7 @@ export default {
 		}
 	},
 	created () {
+		this.getPublicUrls()
 		this.getGroups().then(() => this.getList())
 		this.draggable = this.isMobile() ? '' : '.handle'
 		this.$EventBus.$on(events.OPEN_APP_STORE_AND_GOTO_SYNCTHING, () => {
@@ -400,6 +405,31 @@ export default {
 
 		saveDisplayOrder () {
 			this.$api.users.setCustomStorage(displayOrderConfig, { data: this.displayOrder })
+		},
+
+		/**
+		 * @description: An app's externally-reachable url (e.g. a Cloudflare
+		 * Tunnel hostname) isn't part of the app's own compose config, just a
+		 * per-user note about where it's reachable - stored the same way as
+		 * folders/order, keyed by app name, so it survives across sessions
+		 * without needing any backend changes.
+		 */
+		async getPublicUrls () {
+			this.publicUrls = await this.$api.users
+				.getCustomStorage(publicUrlsConfig)
+				.then(res => res.data.data.data || {})
+				.catch(() => ({}))
+		},
+
+		savePublicUrls () {
+			this.$api.users.setCustomStorage(publicUrlsConfig, { data: this.publicUrls })
+		},
+
+		setPublicUrl (appName, url) {
+			const trimmed = (url || '').trim()
+			if (trimmed) this.$set(this.publicUrls, appName, trimmed)
+			else this.$delete(this.publicUrls, appName)
+			this.savePublicUrls()
 		},
 
 		/**
