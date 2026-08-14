@@ -18,6 +18,11 @@ WWW_PATH="/var/lib/casaos/www"
 APP_MANAGEMENT_SERVICE="casaos-app-management"
 APP_MANAGEMENT_BINARY_PATH="/usr/bin/casaos-app-management"
 BACKUP_ROOT="/mnt/mydata/casaos-backups/update.sh"
+# Every run adds a new timestamped backup and never overwrites an old one -
+# without this, they'd accumulate forever. Kept ones are only pruned after
+# *this* run succeeds, so a run that itself fails never deletes a backup it
+# might still be needed to roll back to.
+KEEP_BACKUPS=5
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run this as root (sudo ./update.sh) - it needs to replace $BINARY_PATH and restart $SERVICE." >&2
@@ -131,6 +136,17 @@ sleep 2
 if systemctl is-active --quiet "$SERVICE" && systemctl is-active --quiet "$APP_MANAGEMENT_SERVICE"; then
   echo "==> $SERVICE and $APP_MANAGEMENT_SERVICE are running on $TAG."
   echo "    Check the dashboard still loads and you can log in before assuming this is fine."
+
+  # Only prune once this run's own backup is confirmed to have been for a
+  # successful update - keep the newest $KEEP_BACKUPS (directory names sort
+  # chronologically since they're timestamps) and remove anything older.
+  mapfile -t old_backups < <(ls -1 "$BACKUP_ROOT" | sort -r | tail -n "+$((KEEP_BACKUPS + 1))")
+  if [[ ${#old_backups[@]} -gt 0 ]]; then
+    echo "==> Pruning ${#old_backups[@]} backup(s) older than the newest $KEEP_BACKUPS"
+    for old in "${old_backups[@]}"; do
+      rm -rf "${BACKUP_ROOT:?}/$old"
+    done
+  fi
 else
   echo "==> One of the services failed to start! Rolling back automatically." >&2
   systemctl stop "$SERVICE" "$APP_MANAGEMENT_SERVICE" || true
