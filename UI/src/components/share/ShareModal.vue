@@ -55,7 +55,7 @@ export default {
 			timer: 0,
 			updateTimer: 0,
 			githubUrl: `https://raw.githubusercontent.com/IceWhaleTech/logo/main/casaos/0.4/casaos_social_share.png`,
-			shareTitle: `I'm using CasaOS, a simple, easy-to-use, elegant open-source home cloud system, try it like me.`,
+			shareTitle: `I'm using CamaOS, a simple, easy-to-use, elegant open-source home cloud system, try it like me.`,
 			shareSites: [
 				'facebook',
 				'twitter',

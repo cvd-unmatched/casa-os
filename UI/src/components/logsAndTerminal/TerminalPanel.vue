@@ -4,7 +4,7 @@
 		<!-- Modal-Card Header Start -->
 		<header class="modal-card-head">
 			<div class="is-flex-grow-1">
-				<h3 class="title is-header">CasaOS</h3>
+				<h3 class="title is-header">CamaOS</h3>
 			</div>
 			<b-tooltip label="Download logs" position="is-bottom" size="is-small" type="is-black">
 				<b-icon v-show="showTabName === 'logs'" class="close-button" icon="downloads-outline" pack="casa"

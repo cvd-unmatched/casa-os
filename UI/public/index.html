@@ -14,13 +14,13 @@
 	<link href="<%= BASE_URL %>favicon.ico" mask="" rel="icon" sizes="any">
 	<link href="<%= BASE_URL %>css/custom.css" rel="stylesheet">
 	<title>
-		CasaOS
+		CamaOS
 	</title>
 </head>
 
 <body>
 	<noscript>
-		<strong>We're sorry but CasaOS doesn't work properly without JavaScript enabled.
+		<strong>We're sorry but CamaOS doesn't work properly without JavaScript enabled.
 			Please enable it to continue.</strong>
 	</noscript>
 	<div id="app"></div>
@@ -91,25 +91,25 @@
 					// and must not blank the whole page over it.
 					if (target.tagName === 'SCRIPT' || (target.tagName === 'LINK' && target.rel === 'stylesheet')) {
 						if (reloadBustingCache()) return;
-						showOverlay('CasaOS failed to load a required file', 'Could not load: ' + (target.src || target.href) +
+						showOverlay('CamaOS failed to load a required file', 'Could not load: ' + (target.src || target.href) +
 							'\n\nA cache-busting reload was already tried and it still failed - this looks like a real issue, not stale cache.');
 					}
 					return;
 				}
 				// no target (or target is window) means this is a genuine
 				// uncaught runtime error, not a resource load failure
-				showOverlay('CasaOS hit an error while starting', (event.error && event.error.stack) || event.message || String(event));
+				showOverlay('CamaOS hit an error while starting', (event.error && event.error.stack) || event.message || String(event));
 			}, true);
 
 			window.addEventListener('unhandledrejection', function (event) {
 				var reason = event.reason;
-				showOverlay('CasaOS hit an error while starting', (reason && reason.stack) || (reason && reason.message) || String(reason));
+				showOverlay('CamaOS hit an error while starting', (reason && reason.stack) || (reason && reason.message) || String(reason));
 			});
 
 			setTimeout(function () {
 				var appEl = document.getElementById('app');
 				if (!shown && appEl && appEl.childElementCount === 0) {
-					showOverlay('CasaOS is taking longer than expected to load', 'No script error was caught, so this is likely a network or caching issue - try a hard refresh, or reloading with cache disabled.');
+					showOverlay('CamaOS is taking longer than expected to load', 'No script error was caught, so this is likely a network or caching issue - try a hard refresh, or reloading with cache disabled.');
 				}
 			}, 8000);
 		})();
