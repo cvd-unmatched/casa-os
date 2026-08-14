@@ -21,14 +21,19 @@
 				{{ $t('Scanning your repos…') }}
 			</div>
 			<div v-else-if="repos.length === 0" class="has-text-grey-100 is-size-7 py-2">
-				{{ $t('Nothing new - every repo with a compose file is already installed.') }}
+				{{ $t('No repos with a docker-compose.yml/.yaml found.') }}
 			</div>
 
 			<div v-for="repo in repos" :key="repo.full_name" class="repo-row mb-2 is-flex is-align-items-center">
 				<span class="one-line is-flex-grow-1 is-size-7" :title="repo.full_name">{{ repo.full_name }}</span>
-				<b-button size="is-small" rounded type="is-dark" class="ml-2" @click="install(repo)">
+				<span v-if="repo.installed" class="tag is-size-7 ml-2">{{ $t('Installed') }}</span>
+				<b-button v-else size="is-small" rounded type="is-dark" class="ml-2" @click="install(repo)">
 					{{ $t('Install') }}
 				</b-button>
+			</div>
+
+			<div v-if="!isLoading && connected && scannedCount > 0" class="has-text-grey-100 is-size-7 mt-2">
+				{{ $t('Scanned {count} repos.', { count: scannedCount }) }}
 			</div>
 		</div>
 	</div>
@@ -39,11 +44,12 @@ import { mixin } from '@/mixins/mixin'
 import events from '@/events/events'
 
 const githubConfig = 'github_token'
-// Only the most recently-updated repos are scanned, since checking each one
-// for a compose file is a separate GitHub API call - this keeps a refresh
-// well within a personal access token's rate limit even for accounts with
-// a lot of repos.
-const MAX_REPOS_TO_SCAN = 30
+// Caps how many repos get checked for a compose file per scan - each check
+// is a separate GitHub API call, so this keeps a refresh well within a
+// personal access token's rate limit even for accounts with a lot of repos.
+// listRepos itself is already capped at 100 (one page), so this only
+// matters for accounts with more repos than that.
+const MAX_REPOS_TO_SCAN = 100
 
 export default {
 	// eslint-disable-next-line vue/multi-word-component-names
@@ -58,6 +64,7 @@ export default {
 			token: '',
 			isLoading: false,
 			repos: [],
+			scannedCount: 0,
 		}
 	},
 	mounted() {
@@ -72,10 +79,11 @@ export default {
 	},
 	methods: {
 		/**
-		 * @description: Scans the most recently updated repos for a
-		 * docker-compose.yml/.yaml at the root, and drops anything that looks
-		 * like it's already installed - best-effort by comparing normalized
-		 * names, since a repo's own compose file can declare any app name.
+		 * @description: Scans repos for a docker-compose.yml/.yaml at the
+		 * root and lists all of them - installed ones too, just marked as
+		 * such (best-effort, by comparing normalized names, since a repo's
+		 * own compose file can declare any app name) rather than hidden, so
+		 * it's clear at a glance what was actually found vs what's still new.
 		 * @return {*} void
 		 */
 		async scan() {
@@ -87,14 +95,18 @@ export default {
 				])
 
 				const installedNames = new Set(appGrid.map(item => this.normalize(item.name)))
-				const candidates = allRepos
-					.filter(repo => !installedNames.has(this.normalize(repo.name)))
-					.slice(0, MAX_REPOS_TO_SCAN)
+				const candidates = allRepos.slice(0, MAX_REPOS_TO_SCAN)
+				this.scannedCount = candidates.length
 
 				const results = await Promise.all(candidates.map(async (repo) => {
 					const [owner, name] = repo.full_name.split('/')
 					const compose = await this.$github.findComposeFile(this.token, owner, name).catch(() => null)
-					return compose ? { full_name: repo.full_name, compose } : null
+					if (!compose) return null
+					return {
+						full_name: repo.full_name,
+						compose,
+						installed: installedNames.has(this.normalize(repo.name)),
+					}
 				}))
 
 				this.repos = results.filter(Boolean)
@@ -128,6 +140,12 @@ export default {
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
+		}
+
+		.tag {
+			background: hsla(0, 0%, 100%, 0.08);
+			color: $grey-100;
+			flex-shrink: 0;
 		}
 	}
 

@@ -78,9 +78,10 @@ $fullhd: 1304px+(2 * $gap) !default;
 $image-placeholder-blur-enabled: false;
 $image-placeholder-blur: 0px;
 $easing: ease-out !default;
-$radius-small: 2px !default;
-$radius: 3px !default;
-$radius-large: 5px !default;
+// Generous, soft rounding throughout - part of the dark-glass theme below.
+$radius-small: 8px !default;
+$radius: 12px !default;
+$radius-large: 18px !default;
 $radius-rounded: 290486px !default;
 $speed: 86ms !default;
 
@@ -196,6 +197,47 @@ $facebook: #1977F3;
 $twitter: #1D9BF0;
 $reddit: #FF4500;
 
+// Dark glass theme - deep neutral surfaces with translucent, blurred panels
+// over the wallpaper (extends the existing .blur-background vibrancy system
+// rather than replacing it), soft light-on-dark borders instead of shadows
+// for separation, and a brighter accent blue for contrast on dark.
+//
+// $casablue was already assigned above (into $primary/$ghost, which don't
+// re-read it), so brighten those directly here instead of reassigning
+// $casablue itself - Sass variables aren't hoisted, a later reassignment
+// wouldn't reach anything that already resolved from the old value.
+$primary: hsl(211, 100%, 56%);
+$primary-light: findLightColor($primary);
+$primary-dark: findDarkColor($primary);
+$primary-invert: findColorInvert($primary);
+$ghost: $primary;
+$ghost-light: findLightColor($ghost);
+$ghost-dark: findDarkColor($ghost);
+$ghost-invert: findColorInvert($ghost);
+
+$scheme-main: hsl(222, 14%, 10%);
+$scheme-main-bis: hsl(222, 14%, 13%);
+$scheme-main-ter: hsl(222, 13%, 16%);
+$scheme-invert: hsl(210, 20%, 97%);
+$scheme-invert-bis: hsl(210, 15%, 92%);
+$scheme-invert-ter: hsl(210, 12%, 86%);
+
+$background: hsl(222, 13%, 16%);
+
+$border: hsla(0, 0%, 100%, 0.08);
+$border-hover: hsla(0, 0%, 100%, 0.16);
+$border-light: hsla(0, 0%, 100%, 0.06);
+
+$text: hsl(210, 16%, 88%);
+$text-invert: hsl(222, 14%, 10%);
+$text-light: hsl(212, 10%, 62%);
+$text-strong: hsl(0, 0%, 100%);
+
+$link-hover: $white;
+$link-hover-border: $border-hover;
+$link-focus: $white;
+$link-active: $white;
+$link-active-border: $border-hover;
 
 // Lists and maps
 $custom-colors: ("grey": ($grey-600, $white)) !default;
@@ -259,21 +301,24 @@ $link-invert: $primary-invert;
 $link-focus-border: $primary;
 
 
-// BackDrop 
-$backDropColor: rgba(53, 54, 58, 0.4);
-$backDropBlur: blur(5px) saturate(180%);
-$backDropBorder: none;
-$backDropBorderRadius: 10px;
-$backDropShadow: rgb(255 255 255 / 12.5%) 0.5px 1px 1px 0px inset;
+// BackDrop - Apple-style frosted glass: stronger blur than before (5px read
+// as barely-there vibrancy), a richer tint so text stays legible over any
+// wallpaper, a soft outer shadow for lift, and a faint light border on top
+// of the existing inset highlight for a proper glass edge.
+$backDropColor: rgba(26, 27, 31, 0.55);
+$backDropBlur: blur(24px) saturate(180%);
+$backDropBorder: 1px solid hsla(0, 0%, 100%, 0.08);
+$backDropBorderRadius: 20px;
+$backDropShadow: rgb(255 255 255 / 10%) 0.5px 1px 1px 0px inset, rgba(0, 0, 0, 0.35) 0px 12px 32px -8px;
 
 // Avatar
-$avatar-border-color: hsl(0, 0%, 89%);
+$avatar-border-color: hsla(0, 0%, 100%, 0.12);
 
 // Loading
 $loading-icon-size: 2.5rem;
 
 // Modal
-$modal-background-background-color: rgba(0, 0, 0, 0.5);
+$modal-background-background-color: rgba(0, 0, 0, 0.65);
 
 // SideBar
 $sidebar-width: 22.5rem;
