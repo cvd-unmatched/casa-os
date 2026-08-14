@@ -426,17 +426,17 @@ export default {
 			z-index: 2;
 			left: 0;
 			top: 0;
-			background-color: #ffffff;
+			background-color: $scheme-main;
 			border-radius: 50%;
 			box-shadow: 0px 32px 64px -16px rgba(28, 31, 34, 0.2);
 			display: flex;
 			justify-content: center;
 			align-items: center;
 			transition: all 0.2s ease-in-out;
-			border: 2px solid #ffffff;
+			border: 2px solid $scheme-main;
 
 			&.is-online {
-				background-color: #ffffff !important;
+				background-color: $scheme-main !important;
 			}
 
 			.b-image-wrapper {

@@ -159,7 +159,7 @@ export default {
   z-index: 100;
   border-radius: 50%;
   box-shadow: 0px 16px 32px -8px rgba(28, 31, 34, 0.12);
-  background-color: #ffffff;
+  background-color: $scheme-main;
 
   &.is-floating {
     .circle-area {
