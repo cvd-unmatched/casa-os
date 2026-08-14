@@ -36,7 +36,19 @@
 		// actually be read/reported instead of just being a blank page.
 		(function () {
 			var shown = false;
+			// Set to true once Vue successfully mounts (see main.js). Before
+			// that, any error really could mean the app never came up at all,
+			// so it's worth blanking the page to show it. After a successful
+			// mount, the app is otherwise working - a single failed background
+			// request (a widget refresh, a stray network blip) shouldn't blank
+			// a page that's actually fine, so it's just logged instead, the
+			// same as an uncaught error would be in any normal app.
+			window.__casaosMounted = false;
 			function showOverlay(title, detail) {
+				if (window.__casaosMounted) {
+					console.error('[CamaOS]', title, detail);
+					return;
+				}
 				if (shown || document.getElementById('boot-error-overlay')) return;
 				shown = true;
 				var el = document.createElement('div');
