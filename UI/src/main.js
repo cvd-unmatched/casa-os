@@ -83,6 +83,16 @@ new Vue({
 	render: h => h(App)
 }).$mount('#app')
 
+// A successful mount means index.html's own required-chunk cache-busting
+// reload (see public/index.html) actually worked, or was never needed -
+// clear its one-shot guard so a genuine future failure in this tab isn't
+// silently left unrecovered because of a reload attempted much earlier.
+try {
+	sessionStorage.removeItem('casaos_reload_attempted')
+} catch (e) {
+	// storage unavailable (e.g. private mode) - nothing to clear
+}
+
 
 
 
