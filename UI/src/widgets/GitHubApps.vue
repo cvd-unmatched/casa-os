@@ -43,6 +43,7 @@
 import { mixin } from '@/mixins/mixin'
 import events from '@/events/events'
 import { ice_i18n } from '@/mixins/base/common-i18n'
+import YAML from 'yaml'
 
 const githubConfig = 'github_token'
 // Caps how many repos get checked for a compose file per scan - each check
@@ -82,12 +83,22 @@ export default {
 		/**
 		 * @description: Scans repos for a docker-compose.yml/.yaml at the
 		 * root and lists all of them - installed ones too, just marked as
-		 * such (best-effort, by comparing normalized names, since a repo's
-		 * own compose file can declare any app name) rather than hidden, so
-		 * it's clear at a glance what was actually found vs what's still new.
+		 * such rather than hidden, so it's clear at a glance what was
+		 * actually found vs what's still new.
+		 *
+		 * "Already installed" is matched primarily by Docker image (the repo's
+		 * compose file's image: values vs each installed app's actual image),
+		 * since name-matching turned out unreliable in practice: a compose
+		 * project that wasn't given an explicit `name:` gets a random
+		 * Docker-generated one (e.g. "clever_khalid"), and even when a repo IS
+		 * named deliberately, that name doesn't have to resemble what the repo
+		 * is casually called or how the app is titled on the dashboard. Name/
+		 * title matching is kept as a fallback for repos whose compose file
+		 * doesn't reference a prebuilt image (e.g. uses `build:` instead).
 		 * @return {*} void
 		 */
 		async scan() {
+			if (this.isLoading) return
 			this.isLoading = true
 			try {
 				const [allRepos, appGrid] = await Promise.all([
@@ -95,17 +106,14 @@ export default {
 					this.$openAPI.appGrid.getAppGrid().then(res => res.data.data || []),
 				])
 
-				// Match on both the app's internal project id (item.name) and
-				// its actual displayed title (item.title, a {lang: text} map -
-				// what a repo is casually "called" often matches the title a
-				// user typed at install time far better than the project id,
-				// which can be anything, e.g. auto-generated).
+				const installedImages = new Set(appGrid.map(item => this.imageRepo(item.image)).filter(Boolean))
 				const installedNames = new Set()
 				appGrid.forEach((item) => {
 					installedNames.add(this.normalize(item.name))
 					const title = ice_i18n(item.title)
 					if (title) installedNames.add(this.normalize(title))
 				})
+
 				const candidates = allRepos.slice(0, MAX_REPOS_TO_SCAN)
 				this.scannedCount = candidates.length
 
@@ -113,10 +121,15 @@ export default {
 					const [owner, name] = repo.full_name.split('/')
 					const compose = await this.$github.findComposeFile(this.token, owner, name).catch(() => null)
 					if (!compose) return null
+
+					const composeImages = this.imagesFromCompose(compose)
+					const installedByImage = composeImages.some(img => installedImages.has(img))
+					const installedByName = installedNames.has(this.normalize(repo.name))
+
 					return {
 						full_name: repo.full_name,
 						compose,
-						installed: installedNames.has(this.normalize(repo.name)),
+						installed: installedByImage || installedByName,
 					}
 				}))
 
@@ -135,6 +148,28 @@ export default {
 
 		normalize(name) {
 			return (name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+		},
+
+		// Strips the :tag or @digest so "ghcr.io/x/y:1.2.3" and
+		// "ghcr.io/x/y:latest" are recognized as the same image.
+		imageRepo(image) {
+			if (!image) return ''
+			return image.split('@')[0].split(':')[0]
+		},
+
+		// Pulls every service's image: out of a compose file's text, ignoring
+		// services that build from source instead of referencing an image.
+		imagesFromCompose(composeYaml) {
+			try {
+				const parsed = YAML.parse(composeYaml)
+				const services = parsed?.services || {}
+				return Object.values(services)
+					.map(service => this.imageRepo(service?.image))
+					.filter(Boolean)
+			}
+			catch (error) {
+				return []
+			}
 		},
 
 		install(repo) {
