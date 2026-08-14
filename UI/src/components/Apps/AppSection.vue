@@ -1,7 +1,7 @@
 <template>
 	<div class="home-section has-text-left">
 		<!-- Title Bar Start -->
-		<div class="is-flex is-align-items-center mb-4">
+		<div class="app-title-bar is-flex is-align-items-center mb-4">
 			<app-section-title-tip
 				id="appTitle1"
 				class="is-flex-grow-1 has-text-sub-04"

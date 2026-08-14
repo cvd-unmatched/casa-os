@@ -1,11 +1,24 @@
 .home-section {
+	position: relative;
+
 	.loading-background {
 		background-color: transparent !important;
 	}
-	
+
 	.column {
 		padding-top: 0.5rem;
 		padding-bottom: 0.5rem;
+	}
+
+	// Floats the "Apps" title bar above the section instead of letting it
+	// push the app grid down - so the grid's own top edge (the app tiles)
+	// lines up with the sidebar's first widget, not the title text.
+	.app-title-bar {
+		position: absolute;
+		top: -2.5rem;
+		left: 0;
+		right: 0;
+		margin-bottom: 0 !important;
 	}
 }
 
