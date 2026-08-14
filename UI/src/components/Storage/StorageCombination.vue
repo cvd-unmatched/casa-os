@@ -1,7 +1,7 @@
 <template>
 	<div v-show="showCombination" class="mb-5 mt-2 pt-5 pb-5 border-1 combination-box">
 		<div class="is-relative is-flex is-justify-content-center top--2rem">
-			<div class="pr-4 pl-4 has-background-white">CasaOS HD</div>
+			<div class="pr-4 pl-4 has-background-white">CamaOS HD</div>
 		</div>
 		<div class="is-flex ">
 			<div class="is-flex-grow-1">
@@ -15,7 +15,7 @@
 							<h4 class="title is-size-14px mb-0 has-text-left one-line">{{
 									item.name || $t('undefined')
 								}}
-								<b-tag v-if="item.isSystem" class="ml-2">CasaOS</b-tag>
+								<b-tag v-if="item.isSystem" class="ml-2">CamaOS</b-tag>
 							</h4>
 
 							<p class="has-text-left is-size-7 has-text-grey-light	">{{ $t('Single Drive Storage') }},

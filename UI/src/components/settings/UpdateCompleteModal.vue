@@ -50,7 +50,7 @@ export default {
 			updateTimer: 0,
 			markdown: ``,
 			githubUrl: `https://github.com/IceWhaleTech/CasaOS`,
-			shareTitle: `I'm using CasaOS, a simple, easy-to-use, elegant open-source home cloud system, try it like me.`,
+			shareTitle: `I'm using CamaOS, a simple, easy-to-use, elegant open-source home cloud system, try it like me.`,
 			shareSites: [
 				'facebook',
 				'twitter',

@@ -10,7 +10,7 @@
 					<div class="ml-3 is-flex-grow-1 is-flex is-align-items-center">
 						<div>
 							<h4 class="title is-size-14px mb-0 has-text-left one-line">{{ item.name }}
-								<b-tag v-if="item.isSystem" class="ml-2">CasaOS</b-tag>
+								<b-tag v-if="item.isSystem" class="ml-2">CamaOS</b-tag>
 							</h4>
 
 							<p class="has-text-left is-size-7 has-text-grey-light	">{{ $t('Single Drive Storage') }}, <span
