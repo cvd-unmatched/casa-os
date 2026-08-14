@@ -21,7 +21,7 @@
 				{{ $t('Scanning your repos…') }}
 			</div>
 			<div v-else-if="repos.length === 0" class="has-text-grey-100 is-size-7 py-2">
-				{{ $t('No repos with a docker-compose.yml/.yaml found.') }}
+				{{ $t('No repos with a compose file found.') }}
 			</div>
 
 			<div v-for="repo in repos" :key="repo.full_name" class="repo-row mb-2 is-flex is-align-items-center">

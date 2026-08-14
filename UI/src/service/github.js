@@ -14,7 +14,9 @@ const github = axios.create({
 
 const authHeader = token => ({ Authorization: `Bearer ${token}` })
 
-const COMPOSE_FILENAMES = ['docker-compose.yml', 'docker-compose.yaml']
+// Newer Docker Compose (v2) convention drops the "docker-" prefix, and both
+// forms are still common in the wild, so all four are worth checking.
+const COMPOSE_FILENAMES = ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml']
 
 export default {
 	/**
@@ -63,11 +65,12 @@ export default {
 	},
 
 	/**
-	 * @description: Looks for a docker-compose.yml/.yaml at the repo root.
+	 * @description: Looks for a compose file at the repo root, trying both
+	 * the docker-compose.y*ml and compose.y*ml naming conventions.
 	 * @param {string} token
 	 * @param {string} owner
 	 * @param {string} repo
-	 * @return {Promise<string|null>} the file's content, or null if neither exists
+	 * @return {Promise<string|null>} the file's content, or null if none exist
 	 */
 	async findComposeFile(token, owner, repo) {
 		for (const filename of COMPOSE_FILENAMES) {

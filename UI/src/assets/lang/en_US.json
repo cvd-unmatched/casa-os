@@ -79,7 +79,7 @@
   "Connect GitHub in Settings to see repos you can install from.": "Connect GitHub in Settings to see repos you can install from.",
   "Scanning your repos…": "Scanning your repos…",
   "Nothing new - every repo with a compose file is already installed.": "Nothing new - every repo with a compose file is already installed.",
-  "No repos with a docker-compose.yml/.yaml found.": "No repos with a docker-compose.yml/.yaml found.",
+  "No repos with a compose file found.": "No repos with a compose file found.",
   "Installed": "Installed",
   "Scanned {count} repos.": "Scanned {count} repos.",
   "Could not scan GitHub repos.": "Could not scan GitHub repos.",
