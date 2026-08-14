@@ -1,10 +1,7 @@
 <template>
 	<div class="brand-bar is-flex is-align-items-flex-end has-text-white">
-		<figure class="image _is-136x26 mb-3">
-			<img alt="logo" srcset="../assets/img/logo/logo.svg 2x, ../assets/img/logo/logo.png 1x">
-		</figure>
-		<span v-if="!rssShow || rss.length === 0" class="intro-text ml-4">made by IceWhale and camachameleon</span>
-		<span v-else class="window ml-4">
+		<span v-if="!rssShow || rss.length === 0" class="intro-text">Made by IceWhale and camachameleon</span>
+		<span v-else class="window">
 			<ul :style="{ '--time': 5 * line + 's', '--perc': perc, '--line': line }" class="scroll">
 				<li v-for="(item, key) in rss" :key="key" class="has-text-left" @click="$messageBus('connect_news')">
 					<a @click="gotoLink(item.link)" class="intro-text is-clickable" target="_blank"

@@ -83,6 +83,12 @@ new Vue({
 	render: h => h(App)
 }).$mount('#app')
 
+// From here on, the app is otherwise working - a single failed background
+// request (a widget refresh, a stray network blip) shouldn't blank a page
+// that's actually fine, so index.html's overlay stops full-screening errors
+// once this is set and just logs them instead, like any normal app would.
+window.__casaosMounted = true
+
 // A successful mount means index.html's own required-chunk cache-busting
 // reload (see public/index.html) actually worked, or was never needed -
 // clear its one-shot guard so a genuine future failure in this tab isn't
