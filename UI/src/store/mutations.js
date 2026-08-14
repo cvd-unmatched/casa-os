@@ -35,13 +35,15 @@ const mutations = {
 
   SET_WALLPAPER(state, wallpaper) {
     localStorage.setItem('wallpaper', wallpaper.path)
+    localStorage.setItem('wallpaper_from', wallpaper.from)
     state.wallpaperObject = wallpaper
   },
 
   SET_DEFAULT_WALLPAPER(state) {
+    localStorage.removeItem('wallpaper_from')
     state.wallpaperObject = {
       path: require('@/assets/background/wallpaper01.jpg'),
-      from: 'Built-in', // Built-in, Upload, Files
+      from: 'Built-in', // Built-in, Upload, Color
     }
   },
 

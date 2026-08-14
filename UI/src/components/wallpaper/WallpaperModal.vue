@@ -37,6 +37,21 @@
 
 				</div>
 			</div>
+
+			<div class="color-picker is-flex is-align-items-center">
+				<span class="mr-3 has-text-grey is-size-7">{{ $t('Solid color') }}</span>
+				<span
+					v-for="color in backgroundColors" :key="color" class="color-swatch mr-2"
+					:class="{ active: from === 'Color' && path === color }" :style="{ background: color }"
+					@click="changeColor(color)"
+				/>
+				<label
+					class="color-swatch custom-swatch" :class="{ active: from === 'Color' && !isPresetColor }"
+					:style="customColorSwatchStyle" :title="$t('Custom color')"
+				>
+					<input type="color" class="color-input" :value="from === 'Color' ? path : '#909599'" @input="changeColor($event.target.value)">
+				</label>
+			</div>
 		</section>
 		<!-- Modal-Card Body End -->
 		<!-- Modal-Card Footer Start-->
@@ -55,12 +70,15 @@
 const wallpaperConfig = "wallpaper"
 import Uploader from 'simple-uploader.js'
 
+const BACKGROUND_COLORS = ['#1E1E2E', '#2D2D3A', '#3D3D50', '#4A4A5E', '#5B8DEF', '#61C454', '#F2994A', '#EB5757', '#9B51E0', '#2D9CDB', '#F2C94C', '#FFFFFF']
+
 export default {
 	data() {
 		return {
 			isLoading: false,
 			isUpLoading: false,
 			uploader: null,
+			backgroundColors: BACKGROUND_COLORS,
 			attributes: {
 				accept: 'image/png, image/jpeg, image/svg+xml, image/bmp, image/png, image/gif'
 			},
@@ -74,14 +92,24 @@ export default {
 					path: require('@/assets/background/wallpaper02.jpg')
 				}
 			],
-			backgroundStyleObj: {
-				backgroundImage: `url(${this.parseUrl(this.$store.state.wallpaperObject.path)})`
-			},
+			backgroundStyleObj: this.$store.state.wallpaperObject.from === 'Color'
+				? { backgroundColor: this.$store.state.wallpaperObject.path }
+				: { backgroundImage: `url(${this.parseUrl(this.$store.state.wallpaperObject.path)})` },
 			path: this.$store.state.wallpaperObject.path,
 			from: this.$store.state.wallpaperObject.from
 		}
 	},
 	components: {},
+	computed: {
+		isPresetColor() {
+			return this.backgroundColors.includes(this.path)
+		},
+		customColorSwatchStyle() {
+			return this.from === 'Color' && !this.isPresetColor
+				? { background: this.path }
+				: {}
+		},
+	},
 	created() {
 		this.uploader = new Uploader({
 			target: this.getTargetUrl(),
@@ -115,7 +143,7 @@ export default {
 
 			if (res.success === 200) {
 				const uploadPath = "SERVER_URL" + res.data.online_path + "&time=" + new Date().getTime()
-				this.backgroundStyleObj.backgroundImage = `url(${this.parseUrl(uploadPath)})`
+				this.backgroundStyleObj = { backgroundImage: `url(${this.parseUrl(uploadPath)})` }
 				this.path = uploadPath
 				this.from = "Upload"
 
@@ -157,9 +185,15 @@ export default {
 			})
 		},
 		changeWallpaper(path) {
-			this.backgroundStyleObj.backgroundImage = `url(${this.parseUrl(path)})`
+			this.backgroundStyleObj = { backgroundImage: `url(${this.parseUrl(path)})` }
 			this.path = path
 			this.from = "Built-in"
+		},
+
+		changeColor(color) {
+			this.backgroundStyleObj = { backgroundColor: color }
+			this.path = color
+			this.from = "Color"
 		},
 
 		checkActive(path) {
@@ -254,5 +288,48 @@ export default {
 	overflow: hidden;
 	background-position: center center;
 	transition: background-image 0.3s ease;
+}
+
+.color-picker {
+	margin-left: 2.625rem;
+	margin-right: 2.625rem;
+	margin-bottom: 1.5rem;
+
+	.color-swatch {
+		display: inline-block;
+		width: 1.5rem;
+		height: 1.5rem;
+		border-radius: 50%;
+		cursor: pointer;
+		box-sizing: border-box;
+		border: 2px solid transparent;
+		transition: border-color 0.15s;
+
+		&.active {
+			border-color: $primary;
+		}
+
+		&:hover {
+			border-color: $primary;
+		}
+	}
+
+	.custom-swatch {
+		position: relative;
+		overflow: hidden;
+		background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+
+		.color-input {
+			position: absolute;
+			top: -25%;
+			left: -25%;
+			width: 150%;
+			height: 150%;
+			border: none;
+			padding: 0;
+			cursor: pointer;
+			opacity: 0;
+		}
+	}
 }
 </style>

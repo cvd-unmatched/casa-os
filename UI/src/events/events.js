@@ -27,5 +27,6 @@ const events = {
 	ACTIVE_DROP_UPLOAD: 'activeDropUpload',
 	SHOW_FILES_SIDEBAR: 'showFilesSidebar',
 	HIDE_FILES_SIDEBAR: 'hideFilesSidebar',
+	SHOW_CUSTOM_INSTALL_WITH_COMPOSE: 'showCustomInstallWithCompose',
 };
 export default events;

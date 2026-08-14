@@ -34,15 +34,13 @@ export default {
 	data() {
 		return {
 			isWelcome: false,
-			backgroundStyleObj: {
-				backgroundImage: localStorage.getItem("wallpaper") ? `url(${this.parseUrl(localStorage.getItem("wallpaper"))})` : `url(${this.$store.state.wallpaperObject.path})`
-			},
+			backgroundStyleObj: this.wallpaperStyle(localStorage.getItem("wallpaper_from") || this.$store.state.wallpaperObject.from, localStorage.getItem("wallpaper") || this.$store.state.wallpaperObject.path),
 		}
 	},
 	watch: {
 		'$store.state.wallpaperObject': {
 			handler(val) {
-				this.backgroundStyleObj.backgroundImage = `url(${this.parseUrl(val.path)})`
+				this.backgroundStyleObj = this.wallpaperStyle(val.from, val.path)
 			},
 			deep: true
 		},
@@ -72,6 +70,11 @@ export default {
 			let newUrl = serverUrl.replace('SERVER_URL', `${this.$protocol}//${this.$baseURL}`)
 			newUrl = newUrl.replace('/ui', '').replace('/user/', '/users/');
 			return newUrl;
+		},
+		wallpaperStyle(from, path) {
+			if (from === 'Color')
+				return { backgroundColor: path }
+			return { backgroundImage: `url(${this.parseUrl(path)})` }
 		},
 	},
 }

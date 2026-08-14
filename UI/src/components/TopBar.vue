@@ -11,6 +11,7 @@ import YAML from 'yaml'
 import events from '@/events/events'
 
 const systemConfigName = 'system'
+const githubConfig = 'github_token'
 
 export default {
   name: 'TopBar',
@@ -51,10 +52,16 @@ export default {
         latest_version: '',
         need_update: false,
         checked: false,
+        release_notes: '',
       },
       latestText: 'Currently at the latest version',
       updateText: 'A new version is available!',
       isConvertingIcons: false,
+      github: {
+        connected: false,
+        username: '',
+        checking: false,
+      },
 
       port: '',
       autoUsbMount: false,
@@ -152,6 +159,7 @@ export default {
   mounted() {
     this.checkVersion()
     this.checkForkVersion()
+    this.loadGithubStatus()
     this.getUserInfo()
     this.getUsbStatus()
     this.getHardwareInfo()
@@ -347,6 +355,81 @@ export default {
         message: this.$t('Icon conversion done: {converted} converted, {skipped} already local, {failed} failed', { converted, skipped, failed }),
         type: failed > 0 ? 'is-warning' : 'is-success',
         duration: 6000,
+      })
+    },
+
+    /**
+     * @description: Load whether a GitHub Personal Access Token is already
+     * saved, and who it belongs to, so the settings panel and the "Installable
+     * from GitHub" widget can both show connected state without re-prompting.
+     * @return {*} void
+     */
+    loadGithubStatus() {
+      this.$api.users.getCustomStorage(githubConfig).then((res) => {
+        const saved = res.data.data
+        if (saved && saved.token) {
+          this.github.connected = true
+          this.github.username = saved.username || ''
+        }
+      })
+    },
+
+    promptConnectGithub() {
+      this.$refs.settingsDrop.toggle()
+      this.$buefy.dialog.prompt({
+        title: this.$t('Connect GitHub'),
+        message: this.$t('Paste a fine-grained Personal Access Token with read-only access to the repos you want to install from. Create one at {url}.', { url: 'github.com/settings/personal-access-tokens/new' }),
+        inputAttrs: {
+          type: 'password',
+          placeholder: this.$t('github_pat_...'),
+        },
+        trapFocus: true,
+        confirmText: this.$t('Connect'),
+        cancelText: this.$t('Cancel'),
+        onConfirm: (token) => this.saveGithubToken(token),
+      })
+    },
+
+    async saveGithubToken(token) {
+      const trimmed = (token || '').trim()
+      if (!trimmed) return
+
+      this.github.checking = true
+      try {
+        const username = await this.$github.getUser(trimmed)
+        await this.$api.users.setCustomStorage(githubConfig, { token: trimmed, username })
+        this.github.connected = true
+        this.github.username = username
+        this.$buefy.toast.open({
+          message: this.$t('Connected to GitHub as {username}.', { username }),
+          type: 'is-success',
+        })
+      }
+      catch (error) {
+        this.$buefy.toast.open({
+          message: this.$t('Could not connect - check the token is valid and has repo read access.'),
+          type: 'is-danger',
+        })
+      }
+      finally {
+        this.github.checking = false
+      }
+    },
+
+    disconnectGithub() {
+      this.$refs.settingsDrop.toggle()
+      this.$buefy.dialog.confirm({
+        title: this.$t('Disconnect GitHub'),
+        message: this.$t('This removes the saved token. You can reconnect at any time.'),
+        type: 'is-dark',
+        confirmText: this.$t('Disconnect'),
+        cancelText: this.$t('Cancel'),
+        onConfirm: () => {
+          this.$api.users.setCustomStorage(githubConfig, {}).then(() => {
+            this.github.connected = false
+            this.github.username = ''
+          })
+        },
       })
     },
 
@@ -568,6 +651,7 @@ export default {
           latest_version: data.latest_version || '',
           need_update: !!(data.current_version && data.need_update),
           checked: true,
+          release_notes: data.release_notes || '',
         }
       }).catch(() => {
         this.forkUpdateInfo.checked = false
@@ -589,6 +673,7 @@ export default {
           latest_version: data.latest_version || '',
           need_update: !!(data.current_version && data.need_update),
           checked: true,
+          release_notes: data.release_notes || '',
         }
         if (data.current_version && !data.need_update) {
           this.$refs.settingsDrop.toggle()
@@ -598,19 +683,36 @@ export default {
           })
           return
         }
-        this.confirmAndUpdateFromRepo(data.latest_version)
+        this.confirmAndUpdateFromRepo(data.latest_version, data.release_notes)
       }).catch(() => {
         // couldn't reach GitHub to check - don't block the update over that, just proceed without a version in the message
         this.confirmAndUpdateFromRepo()
       })
     },
 
-    confirmAndUpdateFromRepo(latestVersion) {
+    /**
+     * @description: Turn "- some commit subject" lines (this repo's
+     * auto-generated changelog, see .github/workflows/release.yml) into a
+     * safely-escaped <ul> for the confirm dialog's HTML message.
+     * @param {string} notes
+     * @return {string}
+     */
+    formatReleaseNotesHtml(notes) {
+      const escapeHtml = str => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      const items = notes.split('\n').filter(line => line.trim().startsWith('- '))
+      if (items.length === 0) return ''
+      const listHtml = items.map(line => `<li>${escapeHtml(line.trim().slice(2))}</li>`).join('')
+      return `<div class="release-notes"><strong>${this.$t('What\'s new')}</strong><ul>${listHtml}</ul></div>`
+    },
+
+    confirmAndUpdateFromRepo(latestVersion, releaseNotes) {
+      const intro = latestVersion
+        ? this.$t('This downloads {version} from your own repository, backs up the current install, and restarts CasaOS. It can take a minute or two.', { version: latestVersion })
+        : this.$t('This downloads the latest release from your own repository, backs up the current install, and restarts CasaOS. It can take a minute or two.')
+      const notesHtml = releaseNotes ? this.formatReleaseNotesHtml(releaseNotes) : ''
       this.$buefy.dialog.confirm({
         title: this.$t('Update from repository'),
-        message: latestVersion
-          ? this.$t('This downloads {version} from your own repository, backs up the current install, and restarts CasaOS. It can take a minute or two.', { version: latestVersion })
-          : this.$t('This downloads the latest release from your own repository, backs up the current install, and restarts CasaOS. It can take a minute or two.'),
+        message: `<p>${intro}</p>${notesHtml}`,
         type: 'is-dark',
         confirmText: this.$t('Update now'),
         cancelText: this.$t('Cancel'),
@@ -859,6 +961,32 @@ export default {
             </div>
           </div>
           <!-- Convert Icons to WebP End -->
+
+          <!-- GitHub Connect Start -->
+          <div
+            class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
+          >
+            <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+              <b-icon class="mr-1 ml-2" icon="github" pack="casa" size="is-20" />
+              <span v-if="github.connected">{{ $t('GitHub: {username}', { username: github.username }) }}</span>
+              <span v-else>{{ $t('GitHub') }}</span>
+            </div>
+            <div class="ml-2">
+              <b-button
+                v-if="github.connected" rounded size="is-small" type="is-dark"
+                @click="disconnectGithub"
+              >
+                {{ $t("Disconnect") }}
+              </b-button>
+              <b-button
+                v-else rounded size="is-small" type="is-dark" :loading="github.checking"
+                @click="promptConnectGithub"
+              >
+                {{ $t("Connect") }}
+              </b-button>
+            </div>
+          </div>
+          <!-- GitHub Connect End -->
 
           <!--  Show other Docker container app(s) Switch Start  -->
           <div

@@ -96,6 +96,9 @@ jobs:
     needs: [build-ui, build-backend, build-app-management]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -113,10 +116,29 @@ jobs:
             tar -czf "casaos-linux-$arch.tar.gz" -C "$dir" casa casaos-app-management www
           done
           sha256sum casaos-linux-*.tar.gz > checksums.txt
+      - name: Generate changelog
+        # generate_release_notes only works off merged PRs - this repo pushes
+        # straight to main, so that produces nothing but a bare compare link.
+        # Build real notes from the actual commit log since the previous tag
+        # instead, so both the GitHub release and the in-dashboard "what
+        # changed" view (GET /v1/sys/update-fork/check reads this same release
+        # body via the GitHub API) always reflect what actually shipped.
+        run: |
+          set -e
+          PREV_TAG=$(git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>/dev/null || echo "")
+          {
+            if [ -n "$PREV_TAG" ]; then
+              echo "## Changes since $PREV_TAG"
+              echo
+              git log "$PREV_TAG..${{ github.ref_name }}" --pretty=format:"- %s"
+            else
+              echo "## Initial release"
+            fi
+          } > CHANGELOG_BODY.md
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             casaos-linux-amd64.tar.gz
             casaos-linux-arm64.tar.gz
             checksums.txt
-          generate_release_notes: true
+          body_path: CHANGELOG_BODY.md
