@@ -91,11 +91,12 @@ func PostUpdateFromRepo(ctx echo.Context) error {
 // @Success 200 {string} string "ok"
 // @Router /sys/update-fork/check [get]
 func GetForkUpdateCheck(ctx echo.Context) error {
-	needUpdate, current, latest := service.MyService.System().CheckForkUpdate()
+	needUpdate, current, latest, releaseNotes := service.MyService.System().CheckForkUpdate()
 	data := map[string]interface{}{
 		"need_update":     needUpdate,
 		"current_version": current,
 		"latest_version":  latest,
+		"release_notes":   releaseNotes,
 	}
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: data})
 }

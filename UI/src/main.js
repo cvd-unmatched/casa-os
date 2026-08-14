@@ -6,6 +6,7 @@ import store from '@/store'
 import i18n from '@/plugins/i18n'
 import api from '@/service/api.js'
 import openAPI from '@/service/index.js'
+import github from '@/service/github.js'
 import Buefy from 'buefy'
 import VueFullscreen from 'vue-fullscreen'
 import Vue2TouchEvents from 'vue2-touch-events'
@@ -62,6 +63,9 @@ Vue.config.errorHandler = function (err, vm, info) {
 }
 Vue.prototype.$api = api;
 Vue.prototype.$openAPI = openAPI;
+// Separate from $api on purpose - this talks to api.github.com directly
+// with a user-supplied token, not this CasaOS server's own API.
+Vue.prototype.$github = github;
 Vue.prototype.$baseIp = baseIp;
 Vue.prototype.$baseURL = baseURL;
 Vue.prototype.$protocol = protocol;

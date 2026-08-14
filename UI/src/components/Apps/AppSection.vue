@@ -236,6 +236,10 @@ export default {
 			this.getList()
 		})
 
+		this.$EventBus.$on(events.SHOW_CUSTOM_INSTALL_WITH_COMPOSE, (composeYaml) => {
+			this.showInstall(0, 'custom', composeYaml)
+		})
+
 		this.ListRefreshTimer = setInterval(() => {
 			this.getList()
 		}, 5000)
@@ -697,7 +701,7 @@ export default {
 		 * @description: Show Install Panel Programmatic
 		 * @return {*} void
 		 */
-		async showInstall (storeId = 0, mode = '') {
+		async showInstall (storeId = 0, mode = '', composeYaml = '') {
 			if (mode === 'custom') {
 				this.$messageBus('apps_custominstall')
 			}
@@ -729,7 +733,8 @@ export default {
 					state: 'install',
 					configData: configData,
 					storeId: storeId,
-					settingData: mode !== 'custom' ? undefined : {}
+					settingData: mode !== 'custom' ? undefined : {},
+					settingComposeData: composeYaml || undefined
 				}
 			})
 		},
