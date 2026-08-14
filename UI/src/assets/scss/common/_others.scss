@@ -4,6 +4,19 @@
 	position: absolute;
 }
 
+// Switch (toggle) - Buefy's off-state track is $grey-light with a
+// $background-colored knob, both unconverted light-theme defaults that read
+// poorly against the dark glass panels. Off state gets a clearly visible
+// translucent track instead, with a light knob throughout (the on state's
+// $primary track already has good contrast, so it's left alone).
+.switch input[type=checkbox] + .check {
+	background: hsla(0, 0%, 100%, 0.18) !important;
+
+	&:before {
+		background: $white !important;
+	}
+}
+
 // Box Width and Height
 .auto-height {
 	height: auto !important;
@@ -36,6 +49,11 @@
 	z-index: 1000;
 	border-radius: 4px;
 	position: relative;
+	// The terminal/logs surface sits inside a translucent glass modal that's
+	// a similar dark tone to its own opaque background, so without a border
+	// the two blend together more than intended - a visible edge keeps it
+	// reading as its own distinct "screen".
+	border: 1px solid $border-hover;
 }
 
 .fdark-bg {
