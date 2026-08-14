@@ -99,18 +99,21 @@ export default {
 
 	.login-panel {
 		text-align: left;
-		background: rgba(255, 255, 255, 0.46);
-		backdrop-filter: blur(1rem);
-		border-radius: 8px;
+		background: $backDropColor;
+		backdrop-filter: $backDropBlur;
+		border: $backDropBorder;
+		box-shadow: $backDropShadow;
+		border-radius: $backDropBorderRadius;
 		padding: 2.5rem 4rem;
 
 		.label {
-			color: #dfdfdf;
+			color: $text;
 		}
 
 		.input {
-			background: rgba(255, 255, 255, 0.32);
+			background: hsla(0, 0%, 100%, 0.08);
 			border-color: transparent;
+			color: $text-strong;
 		}
 
 		&.step1 {
@@ -135,19 +138,22 @@ export default {
 @media screen and (max-width: 480px) {
 	.login-panel {
 		text-align: left;
-		background: rgba(255, 255, 255, 0.46);
-		backdrop-filter: blur(1rem);
-		border-radius: 8px;
+		background: $backDropColor;
+		backdrop-filter: $backDropBlur;
+		border: $backDropBorder;
+		box-shadow: $backDropShadow;
+		border-radius: $backDropBorderRadius;
 		margin: 0 2rem;
 		padding: 2rem !important;
 
 		.label {
-			color: #dfdfdf;
+			color: $text;
 		}
 
 		.input {
-			background: rgba(255, 255, 255, 0.32);
+			background: hsla(0, 0%, 100%, 0.08);
 			border-color: transparent;
+			color: $text-strong;
 		}
 
 		.is-128x128 {

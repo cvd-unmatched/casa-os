@@ -73,12 +73,12 @@
 }
 
 .button.is-text {
-    color: #000;
+    color: $text;
     text-decoration: none;
     background: transparent;
 
     &:hover {
-        background: transparent;
+        background: hsla(0, 0%, 100%, 0.06);
     }
 }
 
@@ -206,32 +206,32 @@
     cursor: pointer;
 
     &:hover {
-        background-color: rgba(0, 0, 0, 0.04);
+        background-color: hsla(0, 0%, 100%, 0.06);
 
     }
 
     &:active {
-        background: hsla(208, 16%, 94%, 1);
+        background: hsla(0, 0%, 100%, 0.1);
     }
 }
 
 .hover-effect {
     &:hover {
-        background-color: rgba(0, 0, 0, 0.04);
+        background-color: hsla(0, 0%, 100%, 0.06);
 
     }
 
     &:active {
-        background: hsla(208, 16%, 94%, 1);
+        background: hsla(0, 0%, 100%, 0.1);
     }
 }
 
 .hover-effect-attention {
     &:hover {
-        background: hsla(18, 98%, 94%, 1);
+        background: hsla(18, 90%, 54%, 0.16);
     }
 
     &:active {
-        background: hsla(18, 100%, 80%, 1);
+        background: hsla(18, 90%, 54%, 0.28);
     }
 }

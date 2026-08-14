@@ -1245,7 +1245,7 @@ export default {
 
 ._footer {
 	height: 3.5rem;
-	border-top: 1px solid rgb(228 233 237);
+	border-top: 1px solid $border;
 }
 
 ._title {
@@ -1256,7 +1256,7 @@ export default {
 	letter-spacing: 0em;
 	text-align: left;
 	padding: 1.25rem 1.25rem 0.5rem 1.5rem;
-	border-bottom: 1px solid rgb(228 233 237);
+	border-bottom: 1px solid $border;
 }
 
 ._is-normal {
@@ -1320,8 +1320,11 @@ export default {
 			min-width: 22.5rem;
 
 			.dropdown-content {
-				background: rgba(255, 255, 255, 1);
-				border-radius: 10px;
+				background: $backDropColor;
+				backdrop-filter: $backDropBlur;
+				border: $backDropBorder;
+				box-shadow: $backDropShadow;
+				border-radius: $backDropBorderRadius;
 
 				.dropdown-item {
 					padding: 0.875rem 1.25rem;
