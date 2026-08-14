@@ -182,7 +182,9 @@ export default {
 			groups: [],
 			displayList: [],
 			displayOrder: [],
-			publicUrls: {}
+			publicUrls: {},
+			// consecutive-miss counter per app name, keyed by name - see pruneMissingApps()
+			missingAppStreak: {}
 		}
 	},
 	components: {
@@ -437,15 +439,45 @@ export default {
 		},
 
 		/**
-		 * @description: Drop app names from folders that no longer exist (e.g. uninstalled)
+		 * @description: Drop app names from folders that no longer exist (e.g.
+		 * uninstalled) - once they've been missing for several consecutive
+		 * getList() polls in a row, not on the first miss. getList() runs every
+		 * 5s and its own error handling only catches a fetch that throws; a
+		 * fetch that *succeeds* but returns a short/partial app-grid response
+		 * (daemon restarting, backend hiccup, container mid-recreate) used to
+		 * look identical to a real uninstall and got saved as one immediately,
+		 * permanently evicting the app from its folder over a single bad tick.
+		 * Also skip entirely on an empty appList - never trust a response with
+		 * nothing in it enough to act on it.
 		 * @return {*} void
 		 */
 		pruneMissingApps () {
+			if (this.appList.length === 0) return
+
+			const MISS_THRESHOLD = 3
 			const validNames = new Set(this.appList.map(item => item.name))
+			const referencedNames = new Set()
+
+			this.groups.forEach((group) => {
+				group.appNames.forEach((name) => {
+					referencedNames.add(name)
+					if (validNames.has(name)) {
+						delete this.missingAppStreak[name]
+					} else {
+						this.missingAppStreak[name] = (this.missingAppStreak[name] || 0) + 1
+					}
+				})
+			})
+
+			// forget streaks for names no folder references anymore
+			Object.keys(this.missingAppStreak).forEach((name) => {
+				if (!referencedNames.has(name)) delete this.missingAppStreak[name]
+			})
+
 			let changed = false
 			this.groups.forEach((group) => {
 				const before = group.appNames.length
-				group.appNames = group.appNames.filter(name => validNames.has(name))
+				group.appNames = group.appNames.filter(name => (this.missingAppStreak[name] || 0) < MISS_THRESHOLD)
 				if (group.appNames.length !== before) changed = true
 			})
 			if (changed) this.saveGroups()
