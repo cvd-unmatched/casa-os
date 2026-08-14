@@ -6,7 +6,7 @@ import dayjs from 'dayjs'
 import { renderSize } from './file_utils'
 
 const typeMap = {
-	"image-x-generic": ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg', 'tiff'],
+	"image-x-generic": ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg', 'tiff', 'heic', 'heif'],
 	"video-x-generic": ['mkv', 'mp4', '3gp', 'avi', 'm2ts', 'webm', 'flv', 'vob', 'ts', 'mts', 'mov', 'wmv', 'rm', 'rmvb', 'asf', 'wmv', 'mpg', 'm4v', 'mpeg', 'f4v'],
 	"audio-x-generic": ['aac', 'aiff', 'alac', 'amr', 'ape', 'flac', 'm4a', 'mp3', 'ogg', 'opus', 'wma', 'wav'],
 	"text-x-generic": ['txt', 'log', 'pages', 'conf', 'config', 'list', 'ini', 'toml', 'cfg', 'rc', 'env', 'service', 'conf.d', 'htaccess', 'gitconfig', 'vim', 'curlrc', 'wgetrc', 'gitignore'],
@@ -29,6 +29,11 @@ const typeMap = {
 	"text-dockerfile": ['dockerfile'],
 }
 const hasThumbImageType = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg']
+// These two need their own generation path (see IconContainerMixin.js) since
+// neither can just be handed to <img src> directly: a video needs a frame
+// grabbed from it, and no browser but Safari can decode heic/heif at all.
+export const hasVideoThumbType = ['mkv', 'mp4', '3gp', 'avi', 'm2ts', 'webm', 'flv', 'vob', 'ts', 'mts', 'mov', 'wmv', 'rm', 'rmvb', 'asf', 'mpg', 'm4v', 'mpeg', 'f4v']
+export const hasHeicThumbType = ['heic', 'heif']
 
 // eslint-disable-next-line no-unused-vars
 const filePanelMap = {
@@ -197,8 +202,10 @@ export const mixin = {
 			if (item.is_dir) {
 				return false
 			} else {
-				const ext = this.getFileExt(item);
-				return hasThumbImageType.indexOf(ext.toLowerCase()) > -1
+				const ext = this.getFileExt(item).toLowerCase();
+				return hasThumbImageType.indexOf(ext) > -1
+					|| hasVideoThumbType.indexOf(ext) > -1
+					|| hasHeicThumbType.indexOf(ext) > -1
 			}
 
 		},

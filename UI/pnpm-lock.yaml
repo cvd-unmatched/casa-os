@@ -107,6 +107,9 @@ importers:
       gsap:
         specifier: ^3.12.2
         version: 3.12.5
+      heic2any:
+        specifier: ^0.0.4
+        version: 0.0.4
       highlight.js:
         specifier: ^11.10.0
         version: 11.10.0
@@ -4380,6 +4383,9 @@ packages:
   he@1.2.0:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
     hasBin: true
+
+  heic2any@0.0.4:
+    resolution: {integrity: sha512-3lLnZiDELfabVH87htnRolZ2iehX9zwpRyGNz22GKXIu0fznlblf0/ftppXKNqS26dqFSeqfIBhAmAj/uSp0cA==}
 
   highlight.js@10.7.3:
     resolution: {integrity: sha512-tzcUFauisWKNHaRkN4Wjl/ZA07gENAjFl3J/c480dprkGTg5EQstgaNFqBfUqCq54kZRIEcreTsAgF/m2quD7A==}
@@ -12904,6 +12910,8 @@ snapshots:
       function-bind: 1.1.2
 
   he@1.2.0: {}
+
+  heic2any@0.0.4: {}
 
   highlight.js@10.7.3: {}
 
