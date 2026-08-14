@@ -59,6 +59,28 @@
 			// rather than letting them reach window.onerror
 			window.__casaosShowBootError = showOverlay;
 
+			// A required chunk 404ing almost always means this page's own
+			// index.html is stale - it's asking for a content-hashed filename
+			// from a previous build that no longer exists on the server (the
+			// hash changes whenever that chunk's contents/dependencies do).
+			// There's no way to fix the server's caching of index.html from
+			// here, so instead: try one hard, cache-busting reload of the page
+			// itself before giving up. A sessionStorage flag stops this from
+			// looping if the failure turns out to be a real outage.
+			function reloadBustingCache() {
+				var flag = 'casaos_reload_attempted';
+				try {
+					if (sessionStorage.getItem(flag)) return false;
+					sessionStorage.setItem(flag, '1');
+				} catch (e) {
+					// storage unavailable (e.g. private mode) - fall through and
+					// still attempt exactly one reload, just without the guard
+				}
+				location.href = location.protocol + '//' + location.host + location.pathname +
+					'?_cb=' + Date.now() + location.hash;
+				return true;
+			}
+
 			window.addEventListener('error', function (event) {
 				var target = event.target;
 				if (target && target !== window) {
@@ -68,7 +90,9 @@
 					// wallpaper, fonts, etc) fails harmlessly all the time
 					// and must not blank the whole page over it.
 					if (target.tagName === 'SCRIPT' || (target.tagName === 'LINK' && target.rel === 'stylesheet')) {
-						showOverlay('CasaOS failed to load a required file', 'Could not load: ' + (target.src || target.href));
+						if (reloadBustingCache()) return;
+						showOverlay('CasaOS failed to load a required file', 'Could not load: ' + (target.src || target.href) +
+							'\n\nA cache-busting reload was already tried and it still failed - this looks like a real issue, not stale cache.');
 					}
 					return;
 				}
