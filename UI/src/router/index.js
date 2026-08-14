@@ -61,34 +61,30 @@ router.beforeEach(async (to, from, next) => {
 	if (to.path !== '/welcome') {
 		if (needInitRes) {
 			next('/welcome');
-		} else {
-			if (requireAuth && !accessToken) {
-				next('/login');
+		} else if (requireAuth && !accessToken) {
+			next('/login');
+		} else if (to.path === '/login') {
+			// next() must be called exactly once per guard resolution - the
+			// previous version always fell through to an unconditional next()
+			// after already calling next('/') here (and in every other case
+			// below), which is what produced the "Redirected when going from
+			// X to Y via a navigation guard" error.
+			if (accessToken) {
+				next('/');
 			} else {
-				switch (to.path) {
-					case "/login":
-						if (accessToken) {
-							next('/');
-						}
-						break;
-
-					case "/logout":
-						localStorage.removeItem("access_token");
-						localStorage.removeItem("refresh_token");
-						localStorage.removeItem("wallpaper");
-						localStorage.removeItem("user");
-						next('/login');
-						break;
-
-					default:
-						if (version == null) {
-							localStorage.removeItem("access_token");
-							next('/login');
-						}
-						break;
-				}
 				next();
 			}
+		} else if (to.path === '/logout') {
+			localStorage.removeItem("access_token");
+			localStorage.removeItem("refresh_token");
+			localStorage.removeItem("wallpaper");
+			localStorage.removeItem("user");
+			next('/login');
+		} else if (version == null) {
+			localStorage.removeItem("access_token");
+			next('/login');
+		} else {
+			next();
 		}
 	} else {
 		if (needInitRes) {
