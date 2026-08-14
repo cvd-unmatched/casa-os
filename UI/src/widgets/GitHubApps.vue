@@ -42,6 +42,7 @@
 <script>
 import { mixin } from '@/mixins/mixin'
 import events from '@/events/events'
+import { ice_i18n } from '@/mixins/base/common-i18n'
 
 const githubConfig = 'github_token'
 // Caps how many repos get checked for a compose file per scan - each check
@@ -94,7 +95,17 @@ export default {
 					this.$openAPI.appGrid.getAppGrid().then(res => res.data.data || []),
 				])
 
-				const installedNames = new Set(appGrid.map(item => this.normalize(item.name)))
+				// Match on both the app's internal project id (item.name) and
+				// its actual displayed title (item.title, a {lang: text} map -
+				// what a repo is casually "called" often matches the title a
+				// user typed at install time far better than the project id,
+				// which can be anything, e.g. auto-generated).
+				const installedNames = new Set()
+				appGrid.forEach((item) => {
+					installedNames.add(this.normalize(item.name))
+					const title = ice_i18n(item.title)
+					if (title) installedNames.add(this.normalize(title))
+				})
 				const candidates = allRepos.slice(0, MAX_REPOS_TO_SCAN)
 				this.scannedCount = candidates.length
 
