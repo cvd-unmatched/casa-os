@@ -4,6 +4,7 @@ import TerminalPanel from './logsAndTerminal/TerminalPanel.vue'
 import PortPanel from './settings/PortPanel.vue'
 import UpdateModal from './settings/UpdateModal.vue'
 import IconStorageModal from './settings/IconStorageModal.vue'
+import SettingsVisibilityModal, { hiddenSettingsConfig } from './settings/SettingsVisibilityModal.vue'
 import { mixin } from '@/mixins/mixin'
 import messages from '@/assets/lang'
 import YAML from 'yaml'
@@ -62,6 +63,7 @@ export default {
         username: '',
         checking: false,
       },
+      hiddenSettings: [],
 
       port: '',
       autoUsbMount: false,
@@ -160,6 +162,7 @@ export default {
     this.checkVersion()
     this.checkForkVersion()
     this.loadGithubStatus()
+    this.loadHiddenSettings()
     this.getUserInfo()
     this.getUsbStatus()
     this.getHardwareInfo()
@@ -430,6 +433,51 @@ export default {
             this.github.username = ''
           })
         },
+      })
+    },
+
+    /**
+     * @description: Loads which settings rows the user has chosen to hide.
+     * @return {*}
+     */
+    loadHiddenSettings() {
+      this.$api.users.getCustomStorage(hiddenSettingsConfig).then((res) => {
+        this.hiddenSettings = (res.data.data && res.data.data.hidden) || []
+      })
+    },
+
+    /**
+     * @description: Persists the updated set of hidden settings rows.
+     * @param {Array<string>} hidden
+     * @return {*}
+     */
+    saveHiddenSettings(hidden) {
+      this.hiddenSettings = hidden
+      this.$api.users.setCustomStorage(hiddenSettingsConfig, { hidden })
+    },
+
+    /**
+     * @description: Whether a given settings row (by SETTINGS_CATALOG key) should render.
+     * @param {string} key
+     * @return {boolean}
+     */
+    isSettingVisible(key) {
+      return this.hiddenSettings.indexOf(key) === -1
+    },
+
+    /**
+     * @description: Opens the modal for choosing which settings rows to show.
+     * @return {*}
+     */
+    showSettingsVisibilityModal() {
+      this.$buefy.modal.open({
+        parent: this,
+        component: SettingsVisibilityModal,
+        hasModalCard: true,
+        trapFocus: true,
+        canCancel: ['escape', 'outside'],
+        props: { hiddenKeys: this.hiddenSettings },
+        events: { change: hidden => this.saveHiddenSettings(hidden) },
       })
     },
 
@@ -822,11 +870,22 @@ export default {
         </template>
 
         <b-dropdown-item :focusable="false" aria-role="menu-item" class="p-0" custom>
-          <h2 class="_title mb-4 has-text-weight-bold">
-            {{ $t("Settings") }}
+          <h2 class="_title mb-4 has-text-weight-bold is-flex is-align-items-center">
+            <span class="is-flex-grow-1">{{ $t("Settings") }}</span>
+            <b-tooltip :label="$t('Choose settings to show')" position="is-bottom" type="is-dark">
+              <b-icon
+                class="close-button is-clickable mr-1" icon="view-list-outline" pack="casa"
+                @click.native="showSettingsVisibilityModal"
+              />
+            </b-tooltip>
+            <b-icon
+              class="close-button is-clickable" icon="close-outline" pack="casa"
+              @click.native="$refs.settingsDrop.toggle()"
+            />
           </h2>
           <!-- Search Engine Switch Start  -->
           <div
+            v-if="isSettingVisible('search_bar_toggle')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -848,7 +907,7 @@ export default {
 
           <!-- Search Engine Start -->
           <div
-            v-if="barData.search_switch"
+            v-if="barData.search_switch && isSettingVisible('search_engine')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -874,6 +933,7 @@ export default {
 
           <!-- Language Start -->
           <div
+            v-if="isSettingVisible('language')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -894,6 +954,7 @@ export default {
 
           <!-- WebUI Port Start -->
           <div
+            v-if="isSettingVisible('webui_port')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -913,6 +974,7 @@ export default {
 
           <!-- Background Start -->
           <div
+            v-if="isSettingVisible('wallpaper')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -929,6 +991,7 @@ export default {
 
           <!-- Icon Storage Start -->
           <div
+            v-if="isSettingVisible('icon_storage')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -945,6 +1008,7 @@ export default {
 
           <!-- Convert Icons to WebP Start -->
           <div
+            v-if="isSettingVisible('convert_icons')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -964,6 +1028,7 @@ export default {
 
           <!-- GitHub Connect Start -->
           <div
+            v-if="isSettingVisible('github')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -990,7 +1055,7 @@ export default {
 
           <!--  Show other Docker container app(s) Switch Start  -->
           <div
-            v-if="$store.state.notImportList.length > 0"
+            v-if="$store.state.notImportList.length > 0 && isSettingVisible('show_other_docker')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -1012,6 +1077,7 @@ export default {
 
           <!--  Show other Docker container app(s) Switch Start  -->
           <div
+            v-if="isSettingVisible('news_feed')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -1033,6 +1099,7 @@ export default {
           <!--  Show other Docker container app(s) Switch End  -->
           <!--  Recommended modules Switch Start  -->
           <div
+            v-if="isSettingVisible('recommended_apps')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -1059,6 +1126,7 @@ export default {
 
           <!-- Automount USB Drive Start  -->
           <div
+            v-if="isSettingVisible('usb_automount')"
             class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
           >
             <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
@@ -1442,6 +1510,21 @@ export default {
 @media screen and (max-width: 480px) {
 	#sidebar-btn {
 		display: flex !important;
+	}
+
+	// The settings panel has no built-in size limit, so on a small screen it
+	// could easily run taller than the viewport with no visible "outside" left
+	// to tap for the normal click-away-to-close behavior - cap its height and
+	// let it scroll internally instead, and don't let it get wider than the
+	// screen either.
+	.dropdown-menu {
+		min-width: 0 !important;
+		max-width: calc(100vw - 1.5rem);
+
+		.dropdown-content {
+			max-height: calc(100vh - 6rem);
+			overflow-y: auto;
+		}
 	}
 }
 

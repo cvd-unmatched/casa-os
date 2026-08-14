@@ -83,6 +83,8 @@
   "Installed": "Installed",
   "Scanned {count} repos.": "Scanned {count} repos.",
   "Could not scan GitHub repos.": "Could not scan GitHub repos.",
+  "Choose settings to show": "Choose settings to show",
+  "Hide settings rows you never use - they stay off until you turn them back on here.": "Hide settings rows you never use - they stay off until you turn them back on here.",
   "Edit Web UI port": "Edit WebUI port",
   "Automount USB Drive": "Automount USB drive",
   "Wallpaper": "Wallpaper",
