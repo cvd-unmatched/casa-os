@@ -87,8 +87,9 @@
 import { mixin } from '@/mixins/mixin';
 import 'viewerjs/dist/viewer.css'
 import { component as Viewer } from "v-viewer"
+import { convertHeicUrl, isHeic } from '@/utils/heic'
 
-const XIMAGES = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg', 'tiff']
+const XIMAGES = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg', 'tiff', 'heic', 'heif']
 export default {
 	mixins: [mixin],
 	props: {
@@ -193,9 +194,21 @@ export default {
 				}
 			})
 		},
-		setSourceImageURLs() {
+		async setSourceImageURLs() {
 			this.currentItem = this.itemList[this.currentItemIndex]
-			this.currentItemArray = [this.getFileUrl(this.currentItem)]
+			const fileUrl = this.getFileUrl(this.currentItem)
+			if (isHeic(this.getFileExt(this.currentItem))) {
+				// browsers can't render heic/heif via <img> directly (no native
+				// decode support outside Safari) - convert it first
+				try {
+					this.currentItemArray = [await convertHeicUrl(fileUrl)]
+					return
+				}
+				catch (error) {
+					console.log(error)
+				}
+			}
+			this.currentItemArray = [fileUrl]
 		},
 		// Hide Toolbar after 5 seconds
 		onMouseMove() {

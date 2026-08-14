@@ -94,7 +94,9 @@
             .nav-bar {
                 width: 15rem;
                 height: 100%;
-                background: hsla(0, 0%, 100%, 0.04);
+                background: $scheme-main-bis;
+                border-right: 1px solid $border;
+                color: $text;
                 flex-grow: 0;
                 flex-shrink: 0;
 
@@ -104,6 +106,7 @@
 
                 .title {
                     padding: 1.5rem;
+                    color: $text-strong;
                 }
 
 
