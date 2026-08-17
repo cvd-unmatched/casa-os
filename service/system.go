@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,6 +61,7 @@ type SystemService interface {
 	GetAppOrderFile(id string) []byte
 	GetNet(physics bool) []string
 	GetNetInfo() []net.IOCountersStat
+	GetNetConnections(kind string) ([]ConnectionSummary, error)
 	GetCpuCoreNum() int
 	GetCpuPercent() float64
 	GetMemInfo() map[string]interface{}
@@ -646,6 +648,59 @@ func (c *systemService) GetCpuCoreNum() int {
 func (c *systemService) GetNetInfo() []net.IOCountersStat {
 	parts, _ := net.IOCounters(true)
 	return parts
+}
+
+// ConnectionSummary is one remote IP currently talking to this host,
+// grouped from the raw per-socket connection list - a personal server
+// easily has dozens of individual connections, and an undifferentiated
+// dump wouldn't actually answer "is someone trying to access the server."
+type ConnectionSummary struct {
+	RemoteIP   string   `json:"remoteIp"`
+	Count      int      `json:"count"`
+	LocalPorts []uint32 `json:"localPorts"`
+}
+
+// GetNetConnections lists who's currently connected, grouped by remote IP.
+// Only ESTABLISHED connections are considered (not LISTEN/CLOSE_WAIT/etc) -
+// this is about "who's actually talking to the box right now", not every
+// open socket.
+func (c *systemService) GetNetConnections(kind string) ([]ConnectionSummary, error) {
+	conns, err := net.Connections(kind)
+	if err != nil {
+		return nil, err
+	}
+
+	type accumulator struct {
+		count      int
+		localPorts map[uint32]struct{}
+	}
+	byRemote := map[string]*accumulator{}
+
+	for _, conn := range conns {
+		if conn.Status != "ESTABLISHED" || conn.Raddr.IP == "" {
+			continue
+		}
+		acc, ok := byRemote[conn.Raddr.IP]
+		if !ok {
+			acc = &accumulator{localPorts: map[uint32]struct{}{}}
+			byRemote[conn.Raddr.IP] = acc
+		}
+		acc.count++
+		acc.localPorts[conn.Laddr.Port] = struct{}{}
+	}
+
+	summaries := make([]ConnectionSummary, 0, len(byRemote))
+	for ip, acc := range byRemote {
+		ports := make([]uint32, 0, len(acc.localPorts))
+		for port := range acc.localPorts {
+			ports = append(ports, port)
+		}
+		sort.Slice(ports, func(i, j int) bool { return ports[i] < ports[j] })
+		summaries = append(summaries, ConnectionSummary{RemoteIP: ip, Count: acc.count, LocalPorts: ports})
+	}
+	sort.Slice(summaries, func(i, j int) bool { return summaries[i].Count > summaries[j].Count })
+
+	return summaries, nil
 }
 
 func (c *systemService) GetNet(physics bool) []string {

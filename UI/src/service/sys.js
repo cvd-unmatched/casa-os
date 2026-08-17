@@ -39,6 +39,11 @@ const sys = {
 		return api.get(`${PREFIX}/disks-usage`);
 	},
 
+	// active connections grouped by remote IP - who's currently connected
+	getConnections() {
+		return api.get(`${PREFIX}/connections`);
+	},
+
 	// get memory info
 	getMemoryInfo() {
 		return api.get(`${PREFIX}/mem`);

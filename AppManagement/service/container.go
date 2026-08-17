@@ -150,11 +150,15 @@ func getContainerStats() {
 				if err != nil {
 					return
 				}
-				decoder := json.NewDecoder(stats.Body)
+				body, err := io.ReadAll(stats.Body)
+				stats.Body.Close()
+				if err != nil {
+					return
+				}
 
 				// data
 				var data interface{}
-				if err := decoder.Decode(&data); err == io.EOF {
+				if err := json.Unmarshal(body, &data); err != nil {
 					return
 				}
 				m, _ := dataStats.Load(v.ID)
@@ -184,13 +188,11 @@ func getContainerStats() {
 
 				dockerStats.Data = data
 				dockerStats.Title = strings.ReplaceAll(v.Names[0], "/", "")
+				dockerStats.NetworkRxBytesPerSec, dockerStats.NetworkTxBytesPerSec = networkRatePerSec(body, dockerStats.Previous)
 
 				// @tiger - 不建议直接把依赖的数据结构封装返回。
 				//          如果依赖的数据结构有变化，应该在这里适配或者保存，这样更加对客户端负责
 				temp.Store(v.ID, dockerStats)
-				if i == 99 {
-					stats.Body.Close()
-				}
 			}(v, i)
 		}
 		wg.Wait()
@@ -201,6 +203,50 @@ func getContainerStats() {
 	}
 	isFinish = false
 	cancel()
+}
+
+// networkRatePerSec computes bytes/sec network throughput for a container by
+// diffing the current sample's network totals against the previous one.
+// Re-decodes both into the SDK's typed stats struct just for this (rather
+// than changing dockerStats.Data/Previous to be typed) since those fields
+// are deliberately kept as an untyped passthrough of whatever Docker
+// returns - see the "@tiger" comment above about not wanting to couple
+// callers to that shape. Returns (0, 0) if there's no previous sample yet,
+// the counters appear to have reset (e.g. the container restarted), or the
+// timestamps didn't move.
+func networkRatePerSec(currentBody []byte, previous interface{}) (rxPerSec, txPerSec float64) {
+	var current types.StatsJSON
+	if err := json.Unmarshal(currentBody, &current); err != nil {
+		return 0, 0
+	}
+	if previous == nil {
+		return 0, 0
+	}
+	previousBody, err := json.Marshal(previous)
+	if err != nil {
+		return 0, 0
+	}
+	var prev types.StatsJSON
+	if err := json.Unmarshal(previousBody, &prev); err != nil {
+		return 0, 0
+	}
+
+	currentRx, currentTx := sumNetworkBytes(current.Networks)
+	prevRx, prevTx := sumNetworkBytes(prev.Networks)
+	elapsed := current.Read.Sub(prev.Read).Seconds()
+	if elapsed <= 0 || currentRx < prevRx || currentTx < prevTx {
+		return 0, 0
+	}
+
+	return float64(currentRx-prevRx) / elapsed, float64(currentTx-prevTx) / elapsed
+}
+
+func sumNetworkBytes(networks map[string]types.NetworkStats) (rx, tx uint64) {
+	for _, n := range networks {
+		rx += n.RxBytes
+		tx += n.TxBytes
+	}
+	return rx, tx
 }
 
 func (ds *dockerService) GetContainerStats() []model.DockerStatsModel {
