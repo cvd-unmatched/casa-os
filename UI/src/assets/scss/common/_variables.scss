@@ -233,6 +233,12 @@ $text-invert: hsl(222, 14%, 10%);
 $text-light: hsl(212, 10%, 62%);
 $text-strong: hsl(0, 0%, 100%);
 
+// Bulma/Buefy components (e.g. the checkbox border, .has-text-grey) reference
+// $grey directly rather than $text-light - left at its light-theme default
+// (hsl(0, 0%, 48%)) it read as a barely-visible dim gray against these dark
+// panels, same class of bug as the toggle switches.
+$grey: $text-light;
+
 $link-hover: $white;
 $link-hover-border: $border-hover;
 $link-focus: $white;
