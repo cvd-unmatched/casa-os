@@ -37,12 +37,11 @@ export const hasHeicThumbType = ['heic', 'heif']
 
 // eslint-disable-next-line no-unused-vars
 const filePanelMap = {
-	'code-editor': union(typeMap['text-x-generic'], typeMap['text-css'], typeMap['text-html'], typeMap['text-x-cmake'], typeMap['text-dockerfile']),
+	'code-editor': union(typeMap['text-x-generic'], typeMap['text-css'], typeMap['text-html'], typeMap['text-x-cmake'], typeMap['text-dockerfile'], typeMap['text-markdown']),
 	"video-player": union(typeMap['video-x-generic'], typeMap['audio-x-generic']),
 	"image-viewer": typeMap['image-x-generic'],
 	"doc-viewer": union(typeMap['application-vnd.ms-word']),
 	"excel-viewer": union(typeMap['application-vnd.ms-excel']),
-	// "mark-down-editor":typeMap['text-markdown'],
 	"pdf-viewer": typeMap['application-pdf'],
 }
 export const wallpaperType = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'svg']

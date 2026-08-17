@@ -219,6 +219,8 @@ export default {
 				mode = 'text/x-go'
 			} else if (ext.toLowerCase() == "vue") {
 				mode = 'text/x-vue'
+			} else if (ext.toLowerCase() == "md") {
+				mode = 'text/x-markdown'
 			}
 			this.codemirror.setOption("mode", mode);
 			this.$api.file.download(this.item.path).then(res => {
