@@ -124,6 +124,20 @@ const sys = {
 		return api.post(`${PREFIX}/custom-icon-from-url`, { mountpoint, url });
 	},
 
+	// webhook notification destinations (container crashes, image updates,
+	// disk warnings, package delivery status)
+	getWebhooks() {
+		return api.get(`${PREFIX}/webhooks`);
+	},
+
+	setWebhooks(config) {
+		return api.post(`${PREFIX}/webhooks`, config);
+	},
+
+	testWebhook(type, url) {
+		return api.post(`${PREFIX}/webhooks/test`, { type, url });
+	},
+
 	// stop casaos
 	stopCasaOS() {
 		return api.post(`${PREFIX}/stop`);

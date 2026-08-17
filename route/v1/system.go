@@ -23,6 +23,7 @@ import (
 	"github.com/IceWhaleTech/CasaOS/pkg/utils"
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/common_err"
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/version"
+	"github.com/IceWhaleTech/CasaOS/pkg/webhook"
 	"github.com/IceWhaleTech/CasaOS/service"
 	model2 "github.com/IceWhaleTech/CasaOS/service/model"
 	"github.com/IceWhaleTech/CasaOS/types"
@@ -197,6 +198,66 @@ func PostCustomIconFromURL(ctx echo.Context) error {
 		"url": "/v1/custom-icons?path=" + url.QueryEscape(savedPath),
 	}
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: data})
+}
+
+// @Summary get configured webhook notification destinations
+// @Produce  application/json
+// @Accept application/json
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/webhooks [get]
+func GetWebhooks(ctx echo.Context) error {
+	cfg, err := webhook.Load()
+	if err != nil {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: cfg})
+}
+
+// @Summary replace the configured webhook notification destinations
+// @Produce  application/json
+// @Accept application/json
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/webhooks [post]
+func PostWebhooks(ctx echo.Context) error {
+	var cfg webhook.Config
+	if err := ctx.Bind(&cfg); err != nil {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "invalid request body: " + err.Error()})
+	}
+	if cfg.DiskWarningThresholdPercent <= 0 || cfg.DiskWarningThresholdPercent > 100 {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "diskWarningThresholdPercent must be between 0 and 100"})
+	}
+	if err := webhook.Save(&cfg); err != nil {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: cfg})
+}
+
+// @Summary send a test notification to an ad-hoc (not necessarily saved) webhook destination
+// @Produce  application/json
+// @Accept application/json
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/webhooks/test [post]
+func PostWebhookTest(ctx echo.Context) error {
+	var body struct {
+		Type string `json:"type"`
+		URL  string `json:"url"`
+	}
+	if err := ctx.Bind(&body); err != nil {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "invalid request body: " + err.Error()})
+	}
+	if body.URL == "" {
+		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: "url is required"})
+	}
+	if err := webhook.SendTest(body.Type, body.URL); err != nil {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
 }
 
 // @Summary  get logs

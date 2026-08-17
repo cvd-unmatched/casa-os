@@ -77,6 +77,10 @@ func InitV1Router() http.Handler {
 			v1SysGroup.POST("/custom-icon", v1.PostCustomIcon)
 			v1SysGroup.POST("/custom-icon-from-url", v1.PostCustomIconFromURL)
 
+			v1SysGroup.GET("/webhooks", v1.GetWebhooks)
+			v1SysGroup.POST("/webhooks", v1.PostWebhooks)
+			v1SysGroup.POST("/webhooks/test", v1.PostWebhookTest)
+
 			v1SysGroup.GET("/wsssh", v1.WsSsh)
 			v1SysGroup.POST("/ssh-login", v1.PostSshLogin)
 			// v1SysGroup.GET("/config", v1.GetSystemConfig) //delete
