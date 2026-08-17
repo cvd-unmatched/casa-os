@@ -57,6 +57,15 @@ import PackageFormModal from '@/components/widgets/PackageFormModal.vue'
 
 const packagesConfig = 'packages_config'
 
+// DHL's free-tier Unified Tracking API caps at 250 requests/day. Leaving
+// headroom below that (for manual refreshes, multiple open tabs/devices, and
+// the initial "add package" check) rather than targeting the cap exactly.
+const DHL_DAILY_REQUEST_BUDGET = 200
+// Never check more often than this regardless of how few packages are
+// tracked - there's no reason to hammer the API for a single package just
+// because the daily-budget math would technically allow it.
+const MIN_DHL_CHECK_INTERVAL_MS = 30 * 60 * 1000
+
 // Only DHL has a free, self-service tracking API. Everything else falls
 // back to a direct link to the carrier's own tracking page plus a manual
 // "mark delivered" toggle - no live status, but zero cost and nothing to
@@ -81,8 +90,15 @@ export default {
 		return {
 			dhlApiKey: '',
 			items: [],
-			// Not persisted - live DHL lookups are re-checked each time the
-			// widget mounts rather than cached, so status can't go stale.
+			// When the last DHL check actually ran (ms epoch) - persisted
+			// (not just in-memory) since the request budget below has to hold
+			// across page reloads and multiple open tabs/devices, not just
+			// within one browser session.
+			lastDhlCheckAt: 0,
+			// Seeded from each item's persisted lastStatusDescription on
+			// mount, then kept live from actual API responses - this way a
+			// rate-limited skip still shows the last known status instead of
+			// a permanent "Checking status…".
 			statuses: {},
 		}
 	},
@@ -92,16 +108,23 @@ export default {
 			if (saved) {
 				this.dhlApiKey = saved.dhlApiKey || ''
 				this.items = saved.items || []
+				this.lastDhlCheckAt = saved.lastDhlCheckAt || 0
+				this.items.forEach((item) => {
+					if (item.carrier === 'dhl' && item.lastStatusDescription)
+						this.$set(this.statuses, item.id, { description: item.lastStatusDescription })
+				})
 				this.refreshDhlStatuses()
 			}
 		})
-		// Re-checks while the dashboard stays open, since a webhook can only
-		// fire in response to a change this widget actually observes - there's
-		// no server-side polling for package delivery (see the webhook
-		// notifications plan for why: the DHL key/tracked-package list only
-		// exist in browser-stored custom storage, which the backend has no
-		// session context to read).
-		this.pollTimer = setInterval(() => this.refreshDhlStatuses(), 30 * 60 * 1000)
+		// A tick to re-check periodically while the dashboard stays open - the
+		// actual request budget is enforced inside refreshDhlStatuses, not
+		// here, since DHL's free tier caps at 250 requests/day and that has to
+		// hold regardless of how many times this widget mounts. See the
+		// webhook notifications plan for why this whole thing is client-side
+		// in the first place: the DHL key/tracked-package list only exist in
+		// browser-stored custom storage, which the backend has no session
+		// context to read.
+		this.pollTimer = setInterval(() => this.refreshDhlStatuses(), MIN_DHL_CHECK_INTERVAL_MS)
 	},
 	beforeDestroy() {
 		clearInterval(this.pollTimer)
@@ -179,17 +202,20 @@ export default {
 		},
 
 		async refreshOne(item) {
-			const previous = this.statuses[item.id]
+			const previousDescription = item.lastStatusDescription
 			this.$set(this.statuses, item.id, undefined)
 			const status = await this.$dhl.trackShipment(this.dhlApiKey, item.trackingNumber)
 			this.$set(this.statuses, item.id, status)
 
-			// previous === undefined means this is the first check this widget
-			// has done for the item (nothing to compare against yet, so no
-			// "change" to report). Only notify once the description text itself
-			// actually differs from what was last seen.
-			if (previous !== undefined && status && (!previous || previous.description !== status.description))
-				this.notifyDeliveryChange(item, status)
+			if (status && status.description !== previousDescription) {
+				item.lastStatusDescription = status.description
+				this.save()
+				// previousDescription undefined means this is the first check
+				// this item has ever had (nothing to compare against, so it's
+				// not a "change" worth a webhook).
+				if (previousDescription !== undefined)
+					this.notifyDeliveryChange(item, status)
+			}
 		},
 
 		async notifyDeliveryChange(item, status) {
@@ -242,13 +268,28 @@ export default {
 
 		refreshDhlStatuses() {
 			if (!this.dhlApiKey) return
-			this.items
-				.filter(item => item.carrier === 'dhl')
-				.forEach(item => this.refreshOne(item))
+			const dhlItems = this.items.filter(item => item.carrier === 'dhl')
+			if (dhlItems.length === 0) return
+
+			// Spread checks out enough that (checks per day) * (tracked DHL
+			// packages) stays under DHL_DAILY_REQUEST_BUDGET, with a floor of
+			// MIN_DHL_CHECK_INTERVAL_MS so a single package still isn't checked
+			// unnecessarily often.
+			const cyclesPerDay = DHL_DAILY_REQUEST_BUDGET / dhlItems.length
+			const minInterval = Math.max(MIN_DHL_CHECK_INTERVAL_MS, (24 * 60 * 60 * 1000) / cyclesPerDay)
+			if (Date.now() - this.lastDhlCheckAt < minInterval) return
+
+			this.lastDhlCheckAt = Date.now()
+			this.save()
+			dhlItems.forEach(item => this.refreshOne(item))
 		},
 
 		save() {
-			this.$api.users.setCustomStorage(packagesConfig, { dhlApiKey: this.dhlApiKey, items: this.items })
+			this.$api.users.setCustomStorage(packagesConfig, {
+				dhlApiKey: this.dhlApiKey,
+				items: this.items,
+				lastDhlCheckAt: this.lastDhlCheckAt,
+			})
 		},
 	},
 }
