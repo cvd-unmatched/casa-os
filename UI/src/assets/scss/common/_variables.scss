@@ -239,6 +239,14 @@ $text-strong: hsl(0, 0%, 100%);
 // panels, same class of bug as the toggle switches.
 $grey: $text-light;
 
+// type="is-dark" is the default button style used throughout this app
+// (Settings, GitHub/Packages widgets, App Store, modals) - left at Bulma's
+// default $dark (hsl(0, 0%, 21%), a near-black charcoal), those buttons
+// nearly disappeared into the dark glass panels since both sit at a similar
+// very-low lightness. Needs to be clearly lighter than the panels themselves
+// ($scheme-main-ter tops out at 16% lightness) to actually read as a button.
+$dark: hsl(220, 9%, 36%);
+
 $link-hover: $white;
 $link-hover-border: $border-hover;
 $link-focus: $white;
