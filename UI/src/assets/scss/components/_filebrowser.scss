@@ -649,6 +649,10 @@
     .tool-bar {
         height: 1.75rem;
         padding: 0 1.5rem;
+        // Explicit rather than relying on inherited body text color, same
+        // reasoning as .close-button - covers the "Total N items" checkbox
+        // label and the view-toggle icon.
+        color: $text;
     }
 
     .scroll-container {
