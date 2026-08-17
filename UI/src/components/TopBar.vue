@@ -712,7 +712,11 @@ export default {
           current_version: data.current_version || '',
           latest_version: data.latest_version || '',
           need_update: !!(data.current_version && data.need_update),
-          checked: true,
+          // An empty latest_version means the backend's own GitHub check
+          // failed (rate limited, network error, etc.) even though this
+          // request to our own API succeeded - don't claim "checked" (and
+          // therefore "up to date") for a check that didn't actually happen.
+          checked: !!data.latest_version,
           release_notes: data.release_notes || '',
         }
       }).catch(() => {
@@ -730,12 +734,21 @@ export default {
     updateFromRepo() {
       this.$api.sys.checkForkUpdate().then((res) => {
         const data = res.data.data
+        const checked = !!data.latest_version
         this.forkUpdateInfo = {
           current_version: data.current_version || '',
           latest_version: data.latest_version || '',
           need_update: !!(data.current_version && data.need_update),
-          checked: true,
+          checked,
           release_notes: data.release_notes || '',
+        }
+        if (!checked) {
+          this.$refs.settingsDrop.toggle()
+          this.$buefy.toast.open({
+            message: this.$t('Could not check for updates - try again shortly.'),
+            type: 'is-danger',
+          })
+          return
         }
         if (data.current_version && !data.need_update) {
           this.$refs.settingsDrop.toggle()

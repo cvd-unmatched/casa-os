@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/IceWhaleTech/CasaOS-Common/utils/command"
@@ -696,6 +697,23 @@ func (s *systemService) UpdateFromRepo() {
 	go command.OnlyExec("systemd-run --unit=casaos-fork-update --collect /bin/bash -c 'curl -fsSL https://raw.githubusercontent.com/cvd-unmatched/casa-os/main/update.sh | bash'")
 }
 
+// GitHub's unauthenticated API allows 60 requests/hour *per source IP* -
+// hitting this on every dashboard load/reload burns through that fast (and
+// on failure, everything below silently returned "no update" with no way to
+// tell that apart from a genuine up-to-date check - see the cache and the
+// explicit error-response check below). 15 minutes keeps this well within
+// budget even with frequent reloads, without making a real new release take
+// unreasonably long to show up.
+const forkUpdateCacheTTL = 15 * time.Minute
+
+var (
+	forkUpdateCacheMu     sync.Mutex
+	forkUpdateCacheAt     time.Time
+	forkUpdateCacheNeed   bool
+	forkUpdateCacheLatest string
+	forkUpdateCacheNotes  string
+)
+
 // CheckForkUpdate compares the release tag this binary was built from
 // (common.ForkVersion, set via -ldflags in .github/workflows/release.yml)
 // against the latest tag published on this fork's own GitHub repo - not
@@ -703,11 +721,24 @@ func (s *systemService) UpdateFromRepo() {
 // built any other way than that release workflow (e.g. a local `go build`)
 // has an empty ForkVersion, in which case we can't tell and say no update
 // is needed rather than guessing.
+//
+// A empty latest return value (with needUpdate false) means the check
+// itself didn't complete - rate limited, network error, etc. - and is
+// deliberately distinguishable from "checked, genuinely up to date" so
+// callers don't report a false "up to date" on a failed check.
 func (s *systemService) CheckForkUpdate() (needUpdate bool, current string, latest string, releaseNotes string) {
 	current = common.ForkVersion
 	if current == "" {
 		return false, current, "", ""
 	}
+
+	forkUpdateCacheMu.Lock()
+	if time.Since(forkUpdateCacheAt) < forkUpdateCacheTTL {
+		needUpdate, latest, releaseNotes = forkUpdateCacheNeed, forkUpdateCacheLatest, forkUpdateCacheNotes
+		forkUpdateCacheMu.Unlock()
+		return needUpdate, current, latest, releaseNotes
+	}
+	forkUpdateCacheMu.Unlock()
 
 	// fetch a page of releases (not just /releases/latest) so that updating
 	// across several versions at once (e.g. v1.0.31 -> v1.0.34) can show
@@ -717,13 +748,28 @@ func (s *systemService) CheckForkUpdate() (needUpdate bool, current string, late
 		"Accept":     "application/vnd.github+json",
 		"User-Agent": "casaos-fork-update-check",
 	})
-	releases := gjson.Parse(resp).Array()
+	parsed := gjson.Parse(resp)
+
+	// GitHub error responses (rate limited, not found, etc.) are a JSON
+	// object with a "message" field, not an array of releases - .Array()
+	// would silently return empty for these too, which is indistinguishable
+	// from "genuinely no releases", so check for this explicitly and log it
+	// rather than let a rate-limit failure quietly look like "up to date".
+	if message := parsed.Get("message").String(); message != "" {
+		logger.Error("failed to check fork releases", zap.String("message", message))
+		cacheForkUpdateResult(false, "", "")
+		return false, current, "", ""
+	}
+
+	releases := parsed.Array()
 	if len(releases) == 0 {
+		cacheForkUpdateResult(false, "", "")
 		return false, current, "", ""
 	}
 
 	latest = releases[0].Get("tag_name").String()
 	if latest == "" {
+		cacheForkUpdateResult(false, "", "")
 		return false, current, "", ""
 	}
 
@@ -742,8 +788,20 @@ func (s *systemService) CheckForkUpdate() (needUpdate bool, current string, late
 		notes.WriteString(release.Get("body").String())
 	}
 	releaseNotes = notes.String()
+	needUpdate = latest != current
 
-	return latest != current, current, latest, releaseNotes
+	cacheForkUpdateResult(needUpdate, latest, releaseNotes)
+
+	return needUpdate, current, latest, releaseNotes
+}
+
+func cacheForkUpdateResult(needUpdate bool, latest, releaseNotes string) {
+	forkUpdateCacheMu.Lock()
+	defer forkUpdateCacheMu.Unlock()
+	forkUpdateCacheAt = time.Now()
+	forkUpdateCacheNeed = needUpdate
+	forkUpdateCacheLatest = latest
+	forkUpdateCacheNotes = releaseNotes
 }
 
 func (s *systemService) UpdateAssist() {

@@ -103,6 +103,7 @@
   "No packages tracked yet.": "No packages tracked yet.",
   "Checking status…": "Checking status…",
   "Could not check status - use the track link instead.": "Could not check status - use the track link instead.",
+  "Could not check for updates - try again shortly.": "Could not check for updates - try again shortly.",
   "Delivered": "Delivered",
   "Mark delivered": "Mark delivered",
   "Track": "Track",
