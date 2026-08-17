@@ -2,7 +2,7 @@
     .dropdown-content {
         border-radius: 0.5rem;
         overflow-x: hidden !important;
-        overflow-y: overlay !important;
+        overflow-y: auto !important;
         padding: 0 !important;
 
         &::-webkit-scrollbar {

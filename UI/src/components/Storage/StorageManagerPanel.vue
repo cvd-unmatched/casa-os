@@ -560,7 +560,7 @@ export default {
 	max-height: 100%;
 
 	::v-deep .tab-content {
-		overflow-y: overlay;
+		overflow-y: auto;
 		max-height: 100%;
 	}
 }
@@ -577,7 +577,7 @@ export default {
 	.modal-card-body {
 		.tab-item {
 			max-height: calc(100vh - 15rem);
-			overflow-y: overlay;
+			overflow-y: auto;
 		}
 	}
 

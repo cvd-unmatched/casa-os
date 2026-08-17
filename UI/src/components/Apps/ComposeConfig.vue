@@ -1076,7 +1076,7 @@ export default {
     padding-right: 1.5rem;
     padding-left: 1.5rem;
     height: calc(100% - 2.75rem);
-    overflow-y: overlay;
+    overflow-y: auto;
     overflow-x: hidden;
 
     .container-icon {

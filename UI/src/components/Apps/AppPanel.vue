@@ -1948,7 +1948,7 @@ export default {
 
     .dropdown-content {
         border-radius: 0.5rem;
-        overflow-y: overlay !important;
+        overflow-y: auto !important;
 
         &::-webkit-scrollbar {
             width: 8px;
@@ -2110,7 +2110,7 @@ export default {
 }
 
 .is-overlay {
-    overflow: overlay;
+    overflow: auto;
 }
 
 .card-width {
