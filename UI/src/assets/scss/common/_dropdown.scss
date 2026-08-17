@@ -1,6 +1,13 @@
 .dropdown-menu {
     .dropdown-content {
         border-radius: 0.5rem;
+        // overflow-y: auto has nothing to scroll within without a height
+        // cap - dropdowns using append-to-body (e.g. the per-app "..." menu,
+        // whose "Move to folder" submenu can get long) render outside their
+        // normal parent and grow unbounded instead of scrolling, since
+        // there's nothing else constraining their height once they're
+        // teleported to <body>.
+        max-height: min(24rem, calc(100vh - 2rem));
         overflow-x: hidden !important;
         overflow-y: auto !important;
         padding: 0 !important;
