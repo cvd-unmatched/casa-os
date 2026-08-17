@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/IceWhaleTech/CasaOS-Common/model"
@@ -24,6 +25,7 @@ import (
 	"github.com/IceWhaleTech/CasaOS/pkg/config"
 	"github.com/IceWhaleTech/CasaOS/pkg/sqlite"
 	"github.com/IceWhaleTech/CasaOS/pkg/utils/file"
+	"github.com/IceWhaleTech/CasaOS/pkg/webhook"
 	"github.com/IceWhaleTech/CasaOS/route"
 	"github.com/IceWhaleTech/CasaOS/service"
 	"github.com/coreos/go-systemd/daemon"
@@ -120,6 +122,16 @@ func main() {
 
 	crontab := cron.New(cron.WithSeconds())
 	if _, err := crontab.AddFunc("@every 5s", route.SendAllHardwareStatusBySocket); err != nil {
+		logger.Error("add crontab error", zap.Error(err))
+	}
+
+	// webhook notifications: disk-space warnings. diskWarningState avoids
+	// re-notifying every tick once a disk crosses the threshold - only fires
+	// again after usage drops back under it and crosses again.
+	diskWarningState := &sync.Map{}
+	if _, err := crontab.AddFunc("@every 15m", func() {
+		checkDiskWarnings(diskWarningState)
+	}); err != nil {
 		logger.Error("add crontab error", zap.Error(err))
 	}
 
@@ -226,5 +238,38 @@ func main() {
 	err = s.Serve(listener) // not using http.serve() to fix G114: Use of net/http serve function that has no support for setting timeouts (see https://github.com/securego/gosec)
 	if err != nil {
 		panic(err)
+	}
+}
+
+// checkDiskWarnings fires a disk_warning webhook the first time a disk
+// crosses the configured threshold, and clears that "already warned" state
+// once usage drops back under it, so a future breach gets its own
+// notification instead of staying silent forever after the first one.
+func checkDiskWarnings(warned *sync.Map) {
+	cfg, err := webhook.Load()
+	if err != nil {
+		logger.Error("webhook: failed to load config", zap.Error(err))
+		return
+	}
+
+	for _, disk := range service.MyService.System().GetAllDisksUsage() {
+		_, alreadyWarned := warned.Load(disk.Mountpoint)
+
+		if disk.UsedPercent < cfg.DiskWarningThresholdPercent {
+			warned.Delete(disk.Mountpoint)
+			continue
+		}
+
+		if alreadyWarned {
+			continue
+		}
+
+		warned.Store(disk.Mountpoint, true)
+		webhook.Send(
+			"disk_warning",
+			"Disk space warning",
+			fmt.Sprintf("%s is %.0f%% full (threshold %.0f%%)", disk.Mountpoint, disk.UsedPercent, cfg.DiskWarningThresholdPercent),
+			map[string]string{"mountpoint": disk.Mountpoint, "usedPercent": fmt.Sprintf("%.1f", disk.UsedPercent)},
+		)
 	}
 }

@@ -4,6 +4,7 @@ import TerminalPanel from './logsAndTerminal/TerminalPanel.vue'
 import PortPanel from './settings/PortPanel.vue'
 import UpdateModal from './settings/UpdateModal.vue'
 import IconStorageModal from './settings/IconStorageModal.vue'
+import WebhooksModal from './settings/WebhooksModal.vue'
 import SettingsVisibilityModal, { hiddenSettingsConfig } from './settings/SettingsVisibilityModal.vue'
 import { mixin } from '@/mixins/mixin'
 import messages from '@/assets/lang'
@@ -272,6 +273,19 @@ export default {
       this.$buefy.modal.open({
         parent: this,
         component: IconStorageModal,
+        hasModalCard: true,
+        trapFocus: true,
+        canCancel: ['escape', 'outside'],
+        scroll: 'keep',
+        animation: 'zoom-in',
+      })
+    },
+
+    showWebhooksModal() {
+      this.$refs.settingsDrop.toggle()
+      this.$buefy.modal.open({
+        parent: this,
+        component: WebhooksModal,
         hasModalCard: true,
         trapFocus: true,
         canCancel: ['escape', 'outside'],
@@ -1005,6 +1019,23 @@ export default {
             </div>
           </div>
           <!-- Icon Storage End -->
+
+          <!-- Webhooks Start -->
+          <div
+            v-if="isSettingVisible('webhooks')"
+            class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
+          >
+            <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+              <b-icon class="mr-1 ml-2" icon="share-outline" pack="casa" size="is-20" />
+              {{ $t("Webhooks") }}
+            </div>
+            <div class="ml-2">
+              <b-button rounded size="is-small" type="is-dark" @click="showWebhooksModal">
+                {{ $t("Configure") }}
+              </b-button>
+            </div>
+          </div>
+          <!-- Webhooks End -->
 
           <!-- Convert Icons to WebP Start -->
           <div

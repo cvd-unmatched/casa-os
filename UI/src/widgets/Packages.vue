@@ -95,6 +95,16 @@ export default {
 				this.refreshDhlStatuses()
 			}
 		})
+		// Re-checks while the dashboard stays open, since a webhook can only
+		// fire in response to a change this widget actually observes - there's
+		// no server-side polling for package delivery (see the webhook
+		// notifications plan for why: the DHL key/tracked-package list only
+		// exist in browser-stored custom storage, which the backend has no
+		// session context to read).
+		this.pollTimer = setInterval(() => this.refreshDhlStatuses(), 30 * 60 * 1000)
+	},
+	beforeDestroy() {
+		clearInterval(this.pollTimer)
 	},
 	methods: {
 		carrierLabel(id) {
@@ -169,9 +179,65 @@ export default {
 		},
 
 		async refreshOne(item) {
+			const previous = this.statuses[item.id]
 			this.$set(this.statuses, item.id, undefined)
 			const status = await this.$dhl.trackShipment(this.dhlApiKey, item.trackingNumber)
 			this.$set(this.statuses, item.id, status)
+
+			// previous === undefined means this is the first check this widget
+			// has done for the item (nothing to compare against yet, so no
+			// "change" to report). Only notify once the description text itself
+			// actually differs from what was last seen.
+			if (previous !== undefined && status && (!previous || previous.description !== status.description))
+				this.notifyDeliveryChange(item, status)
+		},
+
+		async notifyDeliveryChange(item, status) {
+			try {
+				const res = await this.$api.sys.getWebhooks()
+				const destinations = (res.data.data && res.data.data.destinations) || []
+				const title = this.$t('Package update')
+				const message = `${item.nickname || item.trackingNumber}: ${status.description}`
+				const fields = { carrier: this.carrierLabel(item.carrier), tracking_number: item.trackingNumber }
+				destinations
+					.filter(d => d.events.includes('package_update'))
+					.forEach(d => this.postWebhook(d, title, message, fields))
+			}
+			catch (error) {
+				// best-effort - a failed webhook lookup shouldn't disrupt the widget
+			}
+		},
+
+		async postWebhook(destination, title, message, fields) {
+			let body
+			if (destination.type === 'discord') {
+				body = {
+					embeds: [{
+						title,
+						description: message,
+						color: 0x2ECC71,
+						fields: Object.entries(fields).map(([name, value]) => ({ name, value, inline: true })),
+					}],
+				}
+			}
+			else if (destination.type === 'slack') {
+				body = { text: `*${title}*\n${message}` }
+			}
+			else {
+				body = { event: 'package_update', title, message, timestamp: new Date().toISOString(), data: fields }
+			}
+
+			try {
+				await fetch(destination.url, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(body),
+				})
+			}
+			catch (error) {
+				// best-effort - a broken webhook URL shouldn't surface as an
+				// error for what's otherwise a normal status refresh
+			}
 		},
 
 		refreshDhlStatuses() {
