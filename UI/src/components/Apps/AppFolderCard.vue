@@ -1,4 +1,6 @@
 <script>
+import { findFolderTheme } from '@/utils/folderThemes'
+
 export default {
   name: 'AppFolderCard',
   props: {
@@ -15,7 +17,12 @@ export default {
     itemCount() {
       return this.folder.appNames.length
     },
+    activeTheme() {
+      return this.folder.theme ? findFolderTheme(this.folder.theme) : null
+    },
     tintStyle() {
+      if (this.activeTheme)
+        return { background: this.activeTheme.gradient }
       if (!this.folder.color)
         return {}
       const hex = this.folder.color.replace('#', '')
@@ -39,6 +46,9 @@ export default {
     @click="open"
   >
     <div class="blur-background" :style="tintStyle" />
+    <div v-if="activeTheme" class="theme-decorations">
+      <span v-for="(deco, idx) in activeTheme.decorations" :key="idx" class="theme-decoration">{{ deco }}</span>
+    </div>
     <span v-if="itemCount > 0" class="folder-count">{{ itemCount }}</span>
     <div class="cards-content">
       <div class="has-text-centered is-flex is-justify-content-center is-flex-direction-column pt-5 pb-3px img-c">
@@ -61,6 +71,56 @@ export default {
 <style lang="scss" scoped>
 .app-folder-card {
   cursor: pointer;
+}
+
+.theme-decorations {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.theme-decoration {
+  position: absolute;
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.85;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  animation: folder-theme-float ease-in-out infinite;
+
+  &:nth-child(1) {
+    top: 12%;
+    left: 15%;
+    animation-duration: 3.2s;
+    animation-delay: 0s;
+  }
+
+  &:nth-child(2) {
+    top: 55%;
+    right: 12%;
+    animation-duration: 2.6s;
+    animation-delay: 0.6s;
+  }
+
+  &:nth-child(3) {
+    bottom: 10%;
+    left: 45%;
+    animation-duration: 3.6s;
+    animation-delay: 1.2s;
+  }
+}
+
+@keyframes folder-theme-float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.7;
+  }
+
+  50% {
+    transform: translateY(-8px) rotate(8deg);
+    opacity: 1;
+  }
 }
 
 .folder-count {

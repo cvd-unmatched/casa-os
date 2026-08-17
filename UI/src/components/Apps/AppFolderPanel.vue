@@ -6,7 +6,7 @@ export default {
   components: {
     AppCard,
   },
-  inject: ['getFolders', 'getAppList', 'getFolderColors', 'renameFolder', 'changeFolderColor', 'deleteFolder'],
+  inject: ['getFolders', 'getAppList', 'getFolderColors', 'getFolderThemes', 'renameFolder', 'changeFolderColor', 'changeFolderTheme', 'deleteFolder'],
   props: {
     folderId: {
       type: String,
@@ -19,6 +19,9 @@ export default {
     },
     folderColors() {
       return this.getFolderColors()
+    },
+    folderThemes() {
+      return this.getFolderThemes()
     },
     isPresetColor() {
       return !this.folder.color || this.folderColors.includes(this.folder.color)
@@ -83,6 +86,9 @@ export default {
     pickColor(color) {
       this.changeFolderColor(this.folderId, color)
     },
+    pickTheme(themeId) {
+      this.changeFolderTheme(this.folderId, this.folder.theme === themeId ? null : themeId)
+    },
   },
 }
 </script>
@@ -116,6 +122,16 @@ export default {
         <input type="color" class="color-input" :value="folder.color || '#909599'" @input="pickColor($event.target.value)">
       </label>
     </div>
+    <div class="theme-picker is-flex is-align-items-center px-5 pt-3 pb-1">
+      <span class="mr-3 has-text-grey is-size-7">{{ $t('Theme') }}</span>
+      <div class="theme-swatches is-flex is-flex-wrap-wrap">
+        <span
+          v-for="theme in folderThemes" :key="theme.id" class="theme-swatch mr-2 mb-2"
+          :class="{ selected: folder.theme === theme.id }" :style="{ background: theme.gradient }"
+          :title="$t(theme.label)" @click="pickTheme(theme.id)"
+        >{{ theme.decorations[0] }}</span>
+      </div>
+    </div>
     <section class="modal-card-body">
       <div v-if="apps.length === 0" class="has-text-centered has-text-grey py-6">
         {{ $t('This folder is empty. Move apps into it from their menu.') }}
@@ -143,6 +159,24 @@ export default {
     height: 1.25rem;
     border-radius: 50%;
     cursor: pointer;
+    box-sizing: border-box;
+    border: 2px solid transparent;
+    transition: border-color 0.15s;
+
+    &.selected {
+      border-color: hsla(208, 20%, 20%, 1);
+    }
+  }
+
+  .theme-swatch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-size: 0.875rem;
     box-sizing: border-box;
     border: 2px solid transparent;
     transition: border-color 0.15s;
