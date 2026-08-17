@@ -20,6 +20,9 @@
 			<div v-else-if="isLoading" class="has-text-grey-100 is-size-7 py-2">
 				{{ $t('Scanning your repos…') }}
 			</div>
+			<div v-else-if="tokenLacksContentAccess" class="has-text-danger is-size-7 py-2">
+				{{ $t('Your token can list repos but not read their files. Edit it at {url}, enable Contents: Read-only under Repository permissions, then reconnect.', { url: 'github.com/settings/personal-access-tokens' }) }}
+			</div>
 			<div v-else-if="repos.length === 0" class="has-text-grey-100 is-size-7 py-2">
 				{{ $t('No repos with a compose file found.') }}
 			</div>
@@ -67,6 +70,7 @@ export default {
 			isLoading: false,
 			repos: [],
 			scannedCount: 0,
+			tokenLacksContentAccess: false,
 		}
 	},
 	mounted() {
@@ -100,6 +104,7 @@ export default {
 		async scan() {
 			if (this.isLoading) return
 			this.isLoading = true
+			this.tokenLacksContentAccess = false
 			try {
 				const [allRepos, appGrid] = await Promise.all([
 					this.$github.listRepos(this.token),
@@ -119,7 +124,13 @@ export default {
 
 				const results = await Promise.all(candidates.map(async (repo) => {
 					const [owner, name] = repo.full_name.split('/')
-					const compose = await this.$github.findComposeFile(this.token, owner, name, repo.default_branch).catch(() => null)
+					let compose = null
+					try {
+						compose = await this.$github.findComposeFile(this.token, owner, name, repo.default_branch)
+					}
+					catch (error) {
+						if (error.response && error.response.status === 403) this.tokenLacksContentAccess = true
+					}
 					if (!compose) return null
 
 					const composeImages = this.imagesFromCompose(compose)

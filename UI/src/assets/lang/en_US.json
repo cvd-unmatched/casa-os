@@ -80,6 +80,7 @@
   "Scanning your repos…": "Scanning your repos…",
   "Nothing new - every repo with a compose file is already installed.": "Nothing new - every repo with a compose file is already installed.",
   "No repos with a compose file found.": "No repos with a compose file found.",
+  "Your token can list repos but not read their files. Edit it at {url}, enable Contents: Read-only under Repository permissions, then reconnect.": "Your token can list repos but not read their files. Edit it at {url}, enable Contents: Read-only under Repository permissions, then reconnect.",
   "Installed": "Installed",
   "Scanned {count} repos.": "Scanned {count} repos.",
   "Could not scan GitHub repos.": "Could not scan GitHub repos.",
