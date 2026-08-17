@@ -88,7 +88,13 @@ export default {
 				.sort((a, b) => a.split('/').length - b.split('/').length)
 		}
 		catch (error) {
-			// Falls back to root-only checks below - covers empty repos (no
+			// A 403 here means the token can list this repo but isn't allowed
+			// to read its contents (fine-grained PATs gate that separately
+			// under Repository permissions > Contents) - every other call for
+			// this repo would fail the same way, so surface it immediately
+			// instead of burning more requests on root-only fallback checks.
+			if (error.response && error.response.status === 403) throw error
+			// Otherwise fall back to root-only checks - covers empty repos (no
 			// commits yet, so no tree) and any other tree-listing failure.
 			paths = COMPOSE_FILENAMES
 		}
