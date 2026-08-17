@@ -80,6 +80,7 @@ func InitV1Router() http.Handler {
 			v1SysGroup.GET("/webhooks", v1.GetWebhooks)
 			v1SysGroup.POST("/webhooks", v1.PostWebhooks)
 			v1SysGroup.POST("/webhooks/test", v1.PostWebhookTest)
+			v1SysGroup.GET("/connections", v1.GetSystemConnections)
 
 			v1SysGroup.GET("/wsssh", v1.WsSsh)
 			v1SysGroup.POST("/ssh-login", v1.PostSshLogin)

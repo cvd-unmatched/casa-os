@@ -20,6 +20,13 @@ const container = {
 		return api.get(`${PREFIX}/networks`);
 	},
 
+	// per-container resource usage (cpu/mem/network), including the
+	// network_rx_bytes_per_sec/network_tx_bytes_per_sec rate fields used by
+	// the AppNetworkUsage widget
+	getUsage() {
+		return api.get(`${PREFIX}/usage`);
+	},
+
 	// get container logs
 	getLogs(id) {
 		return api.get(`${PREFIX}/${id}/logs`);

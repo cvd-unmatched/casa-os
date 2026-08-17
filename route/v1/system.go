@@ -501,6 +501,21 @@ func GetSystemNetInfo(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: newNet})
 }
 
+// @Summary active connections grouped by remote IP
+// @Produce  application/json
+// @Accept application/json
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/connections [get]
+func GetSystemConnections(ctx echo.Context) error {
+	connections, err := service.MyService.System().GetNetConnections("tcp")
+	if err != nil {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: connections})
+}
+
 func GetSystemProxy(ctx echo.Context) error {
 	url := ctx.QueryParam("url")
 	resp, err := http2.Get(url, 30*time.Second)

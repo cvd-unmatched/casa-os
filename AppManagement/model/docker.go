@@ -14,6 +14,12 @@ type DockerStatsModel struct {
 	Title    string      `json:"title"`
 	Data     interface{} `json:"data"`
 	Previous interface{} `json:"previous"`
+
+	// Computed from Data/Previous's "networks" field (not part of Docker's
+	// own stats payload) since the frontend needs a ready-to-use rate, not
+	// two raw cumulative byte counters to diff itself.
+	NetworkRxBytesPerSec float64 `json:"network_rx_bytes_per_sec"`
+	NetworkTxBytesPerSec float64 `json:"network_tx_bytes_per_sec"`
 }
 
 // reference - https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-configuration-file
