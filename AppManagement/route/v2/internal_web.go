@@ -56,8 +56,11 @@ func (a *AppManagement) GetAppGrid(ctx echo.Context) error {
 		composeApp := (service.ComposeApp)(*app.Compose)
 		containerLists, err := composeApp.Containers(ctx.Request().Context())
 		if err != nil {
+			// one app's containers failing to list (e.g. an orphaned stopped
+			// container with a nil storage layer) must not blank out the whole
+			// grid for every other app - skip it and keep going.
 			logger.Error("failed to get containers for compose app", zap.Error(err), zap.String("app", composeApp.Name))
-			return nil
+			continue
 		}
 
 		for _, containcontainerList := range containerLists {
