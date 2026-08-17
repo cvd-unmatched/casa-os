@@ -127,6 +127,7 @@ import isEqual from 'lodash/isEqual'
 import { ice_i18n } from '@/mixins/base/common-i18n'
 import YAML from 'yamljs'
 import { nanoid } from 'nanoid'
+import { FOLDER_THEMES } from '@/utils/folderThemes'
 
 const SYNCTHING_STORE_ID = 74
 
@@ -200,9 +201,11 @@ export default {
 			getFolders: () => this.groups,
 			getAppList: () => this.appList,
 			getFolderColors: () => FOLDER_COLORS,
+			getFolderThemes: () => FOLDER_THEMES,
 			createFolder: this.createFolder,
 			renameFolder: this.renameFolder,
 			changeFolderColor: this.changeFolderColor,
+			changeFolderTheme: this.changeFolderTheme,
 			deleteFolder: this.deleteFolder,
 			moveAppToFolder: this.moveAppToFolder,
 			removeAppFromFolder: this.removeAppFromFolder,
@@ -671,6 +674,17 @@ export default {
 			const group = this.groups.find(g => g.id === id)
 			if (!group) return
 			group.color = color
+			// a folder is either a plain color or a theme, never both
+			group.theme = null
+			this.saveGroups()
+			this.rebuildDisplayList()
+		},
+
+		changeFolderTheme (id, theme) {
+			const group = this.groups.find(g => g.id === id)
+			if (!group) return
+			group.theme = theme
+			group.color = null
 			this.saveGroups()
 			this.rebuildDisplayList()
 		},
