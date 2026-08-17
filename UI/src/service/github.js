@@ -65,16 +65,36 @@ export default {
 	},
 
 	/**
-	 * @description: Looks for a compose file at the repo root, trying both
-	 * the docker-compose.y*ml and compose.y*ml naming conventions.
+	 * @description: Looks for a compose file anywhere in the repo (not just
+	 * the root - personal repos often tuck it into a docker/ or deploy/
+	 * subfolder), trying both the docker-compose.y*ml and compose.y*ml
+	 * naming conventions. When multiple match, prefers the shallowest path.
 	 * @param {string} token
 	 * @param {string} owner
 	 * @param {string} repo
+	 * @param {string} defaultBranch
 	 * @return {Promise<string|null>} the file's content, or null if none exist
 	 */
-	async findComposeFile(token, owner, repo) {
-		for (const filename of COMPOSE_FILENAMES) {
-			const content = await this.getFileContent(token, owner, repo, filename)
+	async findComposeFile(token, owner, repo, defaultBranch) {
+		let paths
+		try {
+			const res = await github.get(`/repos/${owner}/${repo}/git/trees/${defaultBranch}`, {
+				headers: authHeader(token),
+				params: { recursive: 1 },
+			})
+			paths = (res.data.tree || [])
+				.filter(entry => entry.type === 'blob' && COMPOSE_FILENAMES.includes(entry.path.split('/').pop()))
+				.map(entry => entry.path)
+				.sort((a, b) => a.split('/').length - b.split('/').length)
+		}
+		catch (error) {
+			// Falls back to root-only checks below - covers empty repos (no
+			// commits yet, so no tree) and any other tree-listing failure.
+			paths = COMPOSE_FILENAMES
+		}
+
+		for (const path of paths) {
+			const content = await this.getFileContent(token, owner, repo, path)
 			if (content) return content
 		}
 		return null
