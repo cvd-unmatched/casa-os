@@ -189,8 +189,8 @@ export default {
 
 <style lang="scss" scoped>
 .folder-list {
-	background: #f8f8f8;
-	border: 1px solid rgba(0, 0, 0, 0.1);
+	background: hsla(0, 0%, 100%, 0.04);
+	border: 1px solid $border;
 	border-radius: 0.75rem;
 	padding: 1.5rem;
 

@@ -54,12 +54,12 @@ export default {
 	position: relative;
 	padding: 10px;
 	overflow: hidden;
-	border: 1px dashed #ccc;
-	background-color: #f5f5f5;
+	border: 1px dashed transparent;
+	background-color: transparent;
 }
 
 .uploader-dragover {
-	border-color: #999;
-	background-color: #f7f7f7;
+	border-color: hsl(211, 100%, 56%);
+	background-color: hsla(211, 100%, 56%, 0.08);
 }
 </style>
