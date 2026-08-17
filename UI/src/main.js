@@ -7,6 +7,8 @@ import i18n from '@/plugins/i18n'
 import api from '@/service/api.js'
 import openAPI from '@/service/index.js'
 import github from '@/service/github.js'
+import weather from '@/service/weather.js'
+import dhl from '@/service/dhl.js'
 import Buefy from 'buefy'
 import VueFullscreen from 'vue-fullscreen'
 import Vue2TouchEvents from 'vue2-touch-events'
@@ -66,6 +68,10 @@ Vue.prototype.$openAPI = openAPI;
 // Separate from $api on purpose - this talks to api.github.com directly
 // with a user-supplied token, not this CasaOS server's own API.
 Vue.prototype.$github = github;
+// Talks to open-meteo.com directly - free, no API key, so no token wiring needed.
+Vue.prototype.$weather = weather;
+// Talks to DHL's Unified Tracking API with a user-supplied API key.
+Vue.prototype.$dhl = dhl;
 Vue.prototype.$baseIp = baseIp;
 Vue.prototype.$baseURL = baseURL;
 Vue.prototype.$protocol = protocol;
