@@ -4,17 +4,23 @@
 	position: absolute;
 }
 
-// Switch (toggle) - Buefy's off-state track is $grey-light with a
-// $background-colored knob, both unconverted light-theme defaults that read
-// poorly against the dark glass panels. Off state gets a clearly visible
-// translucent track instead, with a light knob throughout (the on state's
-// $primary track already has good contrast, so it's left alone).
+// Switch (toggle) - every switch in this app uses type="is-dark", whose
+// Buefy checked-state track (hsl(0, 0%, 21%), a dark charcoal) reads almost
+// identically to the light-theme off-state defaults once everything's
+// sitting on the dark glass panels - on and off become hard to tell apart at
+// a glance. Off gets a clearly visible translucent track, on gets $primary
+// blue (an unambiguous, Apple-style "on" color), and the knob stays light
+// throughout so it reads against either track.
 .switch input[type=checkbox] + .check {
 	background: hsla(0, 0%, 100%, 0.18) !important;
 
 	&:before {
 		background: $white !important;
 	}
+}
+
+.switch input[type=checkbox]:checked + .check {
+	background: $primary !important;
 }
 
 // Box Width and Height
