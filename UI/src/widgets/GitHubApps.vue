@@ -119,7 +119,7 @@ export default {
 
 				const results = await Promise.all(candidates.map(async (repo) => {
 					const [owner, name] = repo.full_name.split('/')
-					const compose = await this.$github.findComposeFile(this.token, owner, name).catch(() => null)
+					const compose = await this.$github.findComposeFile(this.token, owner, name, repo.default_branch).catch(() => null)
 					if (!compose) return null
 
 					const composeImages = this.imagesFromCompose(compose)
