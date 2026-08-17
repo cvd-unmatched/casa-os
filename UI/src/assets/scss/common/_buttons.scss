@@ -204,6 +204,10 @@
     height: 1.5rem;
     border-radius: 2px;
     cursor: pointer;
+    // Explicit rather than relying on inherited body text color - this is a
+    // prominent action icon (close/customize), not secondary text, so it
+    // should read clearly regardless of what ambient color it's sitting in.
+    color: $text-strong;
 
     &:hover {
         background-color: hsla(0, 0%, 100%, 0.06);
