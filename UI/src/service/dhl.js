@@ -9,9 +9,13 @@ const dhl = axios.create({ baseURL: 'https://api-eu.dhl.com/track' })
 export default {
 	/**
 	 * @description: Looks up the latest status for a DHL tracking number.
-	 * Returns null on any failure (invalid key, unknown number, network
-	 * error, etc.) - callers should fall back to a manual tracking link
-	 * rather than surfacing an error for a single package.
+	 * Returns null on most failures (unknown number, network error, etc.) -
+	 * callers should fall back to a manual tracking link rather than
+	 * surfacing an error for a single package. A 401 is rethrown instead:
+	 * it means the key itself is rejected (not registered, not yet approved
+	 * by DHL, or wrong key copied) and will fail identically for every
+	 * package, so it's worth telling the user rather than hiding forever
+	 * behind "Could not check status".
 	 * @param {string} apiKey
 	 * @param {string} trackingNumber
 	 * @return {Promise<Object|null>} { description, timestamp } or null
@@ -31,6 +35,7 @@ export default {
 			}
 		}
 		catch (error) {
+			if (error.response && error.response.status === 401) throw error
 			return null
 		}
 	},

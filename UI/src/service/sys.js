@@ -104,9 +104,11 @@ const sys = {
 		return api.post(`${PREFIX}/update-fork`);
 	},
 
-	// check whether a newer release of this fork is available
-	checkForkUpdate() {
-		return api.get(`${PREFIX}/update-fork/check`);
+	// check whether a newer release of this fork is available. force bypasses
+	// the backend's 15-minute cache (see service/system.go CheckForkUpdate) -
+	// only pass it from an explicit user-triggered check, not on page load.
+	checkForkUpdate(force) {
+		return api.get(`${PREFIX}/update-fork/check`, { params: force ? { force: 'true' } : {} });
 	},
 
 	// upload a custom app icon to the configured icon storage disk.

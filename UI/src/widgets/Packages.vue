@@ -27,7 +27,10 @@
 					<div class="has-text-grey-100">
 						{{ carrierLabel(item.carrier) }} · {{ item.trackingNumber }}
 					</div>
-					<div v-if="item.carrier === 'dhl' && dhlApiKey" class="mt-1">
+					<div v-if="item.carrier === 'dhl' && dhlApiKey && dhlAuthFailed" class="mt-1 has-text-danger">
+						{{ $t('DHL rejected this API key. Check it\'s approved at {url} and correctly pasted.', { url: 'developer.dhl.com' }) }}
+					</div>
+					<div v-else-if="item.carrier === 'dhl' && dhlApiKey" class="mt-1">
 						<span v-if="statuses[item.id] === undefined" class="has-text-grey-100">{{ $t('Checking status…') }}</span>
 						<span v-else-if="statuses[item.id]">{{ statuses[item.id].description }}</span>
 						<span v-else class="has-text-grey-100">{{ $t('Could not check status - use the track link instead.') }}</span>
@@ -100,6 +103,10 @@ export default {
 			// rate-limited skip still shows the last known status instead of
 			// a permanent "Checking status…".
 			statuses: {},
+			// Set when DHL returns 401 for the current key - stays true (and
+			// refreshDhlStatuses stops spending request budget) until the user
+			// saves a new key via promptDhlKey.
+			dhlAuthFailed: false,
 		}
 	},
 	mounted() {
@@ -155,6 +162,7 @@ export default {
 				confirmText: this.$t('Save'),
 				onConfirm: (value) => {
 					this.dhlApiKey = value.trim()
+					this.dhlAuthFailed = false
 					this.save()
 					this.refreshDhlStatuses()
 				},
@@ -204,7 +212,15 @@ export default {
 		async refreshOne(item) {
 			const previousDescription = item.lastStatusDescription
 			this.$set(this.statuses, item.id, undefined)
-			const status = await this.$dhl.trackShipment(this.dhlApiKey, item.trackingNumber)
+			let status
+			try {
+				status = await this.$dhl.trackShipment(this.dhlApiKey, item.trackingNumber)
+			}
+			catch (error) {
+				this.dhlAuthFailed = true
+				this.$set(this.statuses, item.id, null)
+				return
+			}
 			this.$set(this.statuses, item.id, status)
 
 			if (status && status.description !== previousDescription) {
@@ -267,7 +283,7 @@ export default {
 		},
 
 		refreshDhlStatuses() {
-			if (!this.dhlApiKey) return
+			if (!this.dhlApiKey || this.dhlAuthFailed) return
 			const dhlItems = this.items.filter(item => item.carrier === 'dhl')
 			if (dhlItems.length === 0) return
 
