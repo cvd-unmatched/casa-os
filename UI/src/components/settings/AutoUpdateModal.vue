@@ -77,7 +77,7 @@ export default {
 
 				<div v-for="app in apps" :key="app.appType + ':' + app.name" class="app-row mb-2 p-3">
 					<div class="is-flex is-align-items-center">
-						<span class="is-flex-grow-1 has-text-weight-semibold one-line" :title="app.currentImage">{{ app.name }}</span>
+						<span class="is-flex-grow-1 has-text-weight-semibold one-line" :title="app.currentImage">{{ app.displayName }}</span>
 						<b-icon
 							class="is-clickable mr-2" icon="restart-outline" pack="casa" size="is-small"
 							:class="{ spinning: rechecking === app.name }" @click.native="recheck(app)"
