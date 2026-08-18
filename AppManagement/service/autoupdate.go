@@ -48,12 +48,6 @@ func GetAutoUpdateStatus() []AutoUpdateAppStatus {
 	return out
 }
 
-func setAutoUpdateStatusCache(status []AutoUpdateAppStatus) {
-	autoUpdateStatusMu.Lock()
-	defer autoUpdateStatusMu.Unlock()
-	autoUpdateStatusCache = status
-}
-
 func updateAutoUpdateStatusCacheEntry(entry AutoUpdateAppStatus) {
 	autoUpdateStatusMu.Lock()
 	defer autoUpdateStatusMu.Unlock()
@@ -89,26 +83,26 @@ func CheckAndApplyAutoUpdates(ctx context.Context, notified *sync.Map) {
 		return
 	}
 
-	var status []AutoUpdateAppStatus
-
+	// updated per-app as the run progresses, not just once at the end - a
+	// full pass across every app at pacingDelay apart can take a couple of
+	// minutes, and the panel should show what's known so far rather than
+	// nothing until the entire run completes.
 	composeApps, err := MyService.Compose().List(ctx)
 	if err != nil {
 		logger.Error("autoupdate: failed to list compose apps", zap.Error(err))
 	}
 	for _, app := range composeApps {
-		status = append(status, checkAndMaybeApplyComposeApp(ctx, app, cfg, notified))
+		updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyComposeApp(ctx, app, cfg, notified))
 		time.Sleep(pacingDelay)
 	}
 
 	casaOSApps, _ := MyService.Docker().GetContainerAppList(nil, nil, nil)
 	if casaOSApps != nil {
 		for _, app := range *casaOSApps {
-			status = append(status, checkAndMaybeApplyStandaloneApp(ctx, app, cfg, notified))
+			updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyStandaloneApp(ctx, app, cfg, notified))
 			time.Sleep(pacingDelay)
 		}
 	}
-
-	setAutoUpdateStatusCache(status)
 }
 
 // RecheckApp forces one synchronous, read-only registry check for a single
@@ -334,18 +328,25 @@ func applyStandaloneAppUpdate(ctx context.Context, containerID, newImage string)
 }
 
 func checkNewestTag(ctx context.Context, image, currentTag string) (string, bool) {
+	currentVersion, err := semver.NewVersion(currentTag)
+	if err != nil {
+		// the currently pinned tag isn't a version at all (latest, main, a
+		// git sha, ...) - there's no valid basis to call any registry tag
+		// "newer" than that, so don't guess. Without this check, an app
+		// pinned to :latest would get compared against every dated/numbered
+		// tag still sitting in the registry's tag list and could get
+		// "newer" reported for a tag that's actually years old (confirmed:
+		// this reported Home Assistant's 2024.4.4 as newer than :latest).
+		return "", false
+	}
+
 	tags, err := docker.GetTags(ctx, image)
 	if err != nil {
 		logger.Error("autoupdate: failed to list registry tags", zap.Error(err), zap.String("image", image))
 		return "", false
 	}
 
-	includePrerelease := false
-	if v, err := semver.NewVersion(currentTag); err == nil && v.Prerelease() != "" {
-		includePrerelease = true
-	}
-
-	return autoupdate.NewestTag(tags, includePrerelease)
+	return autoupdate.NewestTag(tags, currentVersion.Prerelease() != "")
 }
 
 func notifyImageUpdate(appName, serviceName, newTag string, notified *sync.Map) {

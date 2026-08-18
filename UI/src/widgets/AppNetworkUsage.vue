@@ -112,6 +112,10 @@ export default {
 
 <style lang="scss" scoped>
 .app-network-usage {
+	// hard safety net - nothing should ever visually escape the widget box,
+	// even if a row's content still doesn't fully fit after wrapping
+	overflow-x: hidden;
+
 	.app-icon {
 		width: 1.25rem;
 		height: 1.25rem;
@@ -119,8 +123,18 @@ export default {
 		object-fit: cover;
 	}
 
+	.app-row {
+		// the rate span (flex-shrink: 0, since compressing the numbers
+		// would make them misleading) can be wider than the remaining
+		// space once the title has shrunk as far as it can - letting the
+		// row wrap drops it to its own line instead of overflowing the
+		// widget's right edge.
+		flex-wrap: wrap;
+	}
+
 	.rate {
 		flex-shrink: 0;
+		margin-left: auto;
 
 		.up {
 			color: rgb(0, 143, 251);
