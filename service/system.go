@@ -51,7 +51,7 @@ import (
 type SystemService interface {
 	UpdateSystemVersion(version string)
 	UpdateFromRepo()
-	CheckForkUpdate() (needUpdate bool, current string, latest string, releaseNotes string)
+	CheckForkUpdate(force bool) (needUpdate bool, current string, latest string, releaseNotes string)
 	GetSystemConfigDebug() []string
 	GetCasaOSLogs(lineNumber int) string
 	UpdateAssist()
@@ -781,19 +781,27 @@ var (
 // itself didn't complete - rate limited, network error, etc. - and is
 // deliberately distinguishable from "checked, genuinely up to date" so
 // callers don't report a false "up to date" on a failed check.
-func (s *systemService) CheckForkUpdate() (needUpdate bool, current string, latest string, releaseNotes string) {
+//
+// force bypasses the cache below - used by the dashboard's manual "check for
+// update" button so a user isn't stuck looking at a stale "up to date" for
+// up to forkUpdateCacheTTL after a release they know just went out (GitHub's
+// unauthenticated rate limit is the reason for the cache in the first place,
+// so this still isn't called on every page load - only on an explicit click).
+func (s *systemService) CheckForkUpdate(force bool) (needUpdate bool, current string, latest string, releaseNotes string) {
 	current = common.ForkVersion
 	if current == "" {
 		return false, current, "", ""
 	}
 
-	forkUpdateCacheMu.Lock()
-	if time.Since(forkUpdateCacheAt) < forkUpdateCacheTTL {
-		needUpdate, latest, releaseNotes = forkUpdateCacheNeed, forkUpdateCacheLatest, forkUpdateCacheNotes
+	if !force {
+		forkUpdateCacheMu.Lock()
+		if time.Since(forkUpdateCacheAt) < forkUpdateCacheTTL {
+			needUpdate, latest, releaseNotes = forkUpdateCacheNeed, forkUpdateCacheLatest, forkUpdateCacheNotes
+			forkUpdateCacheMu.Unlock()
+			return needUpdate, current, latest, releaseNotes
+		}
 		forkUpdateCacheMu.Unlock()
-		return needUpdate, current, latest, releaseNotes
 	}
-	forkUpdateCacheMu.Unlock()
 
 	// fetch a page of releases (not just /releases/latest) so that updating
 	// across several versions at once (e.g. v1.0.31 -> v1.0.34) can show

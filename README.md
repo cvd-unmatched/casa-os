@@ -75,6 +75,11 @@
     </kbd>
 </p>
 
+> **This is a personal fork** (github.com/cvd-unmatched/casa-os). See
+> [FORK.md](FORK.md) for what's different and, importantly, how to update a
+> running install using this repo's own [`update.sh`](update.sh) instead of
+> CasaOS's built-in updater.
+
 ## Why do you need Personal Cloud?
 
 In 2020, the team noticed three important trends:

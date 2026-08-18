@@ -56,6 +56,7 @@ export default {
         checked: false,
         release_notes: '',
       },
+      checkingForkUpdate: false,
       latestText: 'Currently at the latest version',
       updateText: 'A new version is available!',
       isConvertingIcons: false,
@@ -703,10 +704,13 @@ export default {
      * version label and the Update button's disabled state. Best-effort -
      * if it fails (no network to GitHub, or a locally-built binary with no
      * embedded version), leave the button enabled rather than guessing.
+     * @param {boolean} force Bypass the backend's 15-minute cache - only
+     * pass true from the manual "check now" click, not the page-load call.
      * @return {*} void
      */
-    checkForkVersion() {
-      this.$api.sys.checkForkUpdate().then((res) => {
+    checkForkVersion(force) {
+      if (force) this.checkingForkUpdate = true
+      this.$api.sys.checkForkUpdate(force).then((res) => {
         const data = res.data.data
         this.forkUpdateInfo = {
           current_version: data.current_version || '',
@@ -719,8 +723,24 @@ export default {
           checked: !!data.latest_version,
           release_notes: data.release_notes || '',
         }
+        if (force) {
+          this.checkingForkUpdate = false
+          if (!this.forkUpdateInfo.checked) {
+            this.$buefy.toast.open({ message: this.$t('Could not check for updates - try again shortly.'), type: 'is-danger' })
+          }
+          else if (this.forkUpdateInfo.need_update) {
+            this.$buefy.toast.open({ message: this.$t('{version} available.', { version: this.forkUpdateInfo.latest_version }), type: 'is-info' })
+          }
+          else {
+            this.$buefy.toast.open({ message: this.$t('Already up to date ({version}).', { version: this.forkUpdateInfo.current_version }), type: 'is-success' })
+          }
+        }
       }).catch(() => {
         this.forkUpdateInfo.checked = false
+        if (force) {
+          this.checkingForkUpdate = false
+          this.$buefy.toast.open({ message: this.$t('Could not check for updates - try again shortly.'), type: 'is-danger' })
+        }
       })
     },
 
@@ -1238,6 +1258,11 @@ export default {
                 <b-icon class="mr-1 ml-2" icon="update-outline" pack="casa" size="is-20" />
                 {{ $t("Update from repository") }}
               </div>
+              <b-icon
+                class="is-clickable" :class="{ 'is-spinning': checkingForkUpdate }"
+                custom-size="mdi-18px" icon="refresh" :title="$t('Check for update')"
+                @click.native="!checkingForkUpdate && checkForkVersion(true)"
+              />
               <b-button
                 class="ml-2" rounded size="is-small" type="is-dark"
                 :disabled="forkUpdateInfo.checked && !forkUpdateInfo.need_update" @click="updateFromRepo"
@@ -1344,6 +1369,20 @@ export default {
 </template>
 
 <style lang="scss">
+.is-spinning {
+	animation: topbar-spin 0.8s linear infinite;
+}
+
+@keyframes topbar-spin {
+	from {
+		transform: rotate(0deg);
+	}
+
+	to {
+		transform: rotate(360deg);
+	}
+}
+
 ._is-large {
 	// bulma 3rem;
 	//height: 2.5rem;

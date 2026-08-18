@@ -92,7 +92,8 @@ func PostUpdateFromRepo(ctx echo.Context) error {
 // @Success 200 {string} string "ok"
 // @Router /sys/update-fork/check [get]
 func GetForkUpdateCheck(ctx echo.Context) error {
-	needUpdate, current, latest, releaseNotes := service.MyService.System().CheckForkUpdate()
+	force := ctx.QueryParam("force") == "true"
+	needUpdate, current, latest, releaseNotes := service.MyService.System().CheckForkUpdate(force)
 	data := map[string]interface{}{
 		"need_update":     needUpdate,
 		"current_version": current,
