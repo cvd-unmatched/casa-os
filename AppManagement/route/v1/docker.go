@@ -235,7 +235,31 @@ func UninstallApp(ctx echo.Context) error {
 			return ctx.JSON(http.StatusNotFound, modelCommon.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
 		}
 
-		return ctx.JSON(http.StatusInternalServerError, modelCommon.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+		// Docker can refuse to fully inspect a container whose storage-layer
+		// metadata is corrupted (e.g. "RWLayer ... is unexpectedly nil",
+		// seen on containers whose image was pruned while they still
+		// referenced it) even though a plain force-remove by ID still works
+		// fine - confirmed directly against one of these containers. Don't
+		// block uninstall on a successful inspect: fall back to removing by
+		// ID alone, skipping the image/config-folder cleanup that needs the
+		// inspected container's data (best-effort, not the primary goal).
+		logger.Error("failed to inspect container before uninstall, falling back to remove-by-id", zap.Error(err), zap.String("id", containerID))
+
+		go func() {
+			go service.PublishEventWrapper(httpCtx, common.EventTypeAppUninstallBegin, nil)
+			defer service.PublishEventWrapper(httpCtx, common.EventTypeAppUninstallEnd, nil)
+
+			if err := service.MyService.Docker().RemoveContainer(containerID, false); err != nil {
+				logger.Error("failed to force-remove container by id", zap.Error(err), zap.String("id", containerID))
+				go service.PublishEventWrapper(httpCtx, common.EventTypeAppUninstallError, map[string]string{
+					common.PropertyTypeMessage.Name: err.Error(),
+				})
+				return
+			}
+			config.CasaOSGlobalVariables.AppChange = true
+		}()
+
+		return ctx.JSON(http.StatusOK, modelCommon.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
 	}
 
 	eventProperties := common.PropertiesFromContext(httpCtx)
