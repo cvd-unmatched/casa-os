@@ -103,10 +103,18 @@ func main() {
 		// their registries for a newer semver tag (not the old catalog-only
 		// digest comparison, which silently never checked apps installed
 		// outside the app store), notifies via webhook, and applies the
-		// update for any app whose policy is "auto" (see pkg/autoupdate).
+		// update for any app with auto-update enabled (see pkg/autoupdate).
 		// notifiedImageUpdates avoids re-notifying every hour for the same
 		// still-unapplied update.
 		notifiedImageUpdates := &sync.Map{}
+
+		// run once at startup, same as the appstore catalog job above -
+		// otherwise the status cache (what GET /v1/autoupdate/apps serves)
+		// sits empty for up to an hour after every restart, since
+		// cron.AddFunc's @every schedule only fires the NEXT occurrence,
+		// not immediately.
+		go service.CheckAndApplyAutoUpdates(ctx, notifiedImageUpdates)
+
 		if _, err := crontab.AddFunc("@every 1h", func() {
 			service.CheckAndApplyAutoUpdates(ctx, notifiedImageUpdates)
 		}); err != nil {

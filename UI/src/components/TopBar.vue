@@ -1499,12 +1499,18 @@ export default {
 	position: relative;
 	z-index: 20;
 	height: 2.75rem;
-	background: rgba(255, 255, 255, 1);
+	// This fork is unconditionally dark-themed everywhere else - matching
+	// that here instead of gating on prefers-color-scheme, which depends on
+	// the browser/OS actually reporting a dark preference and previously
+	// left icons (e.g. Terminal & Logs) rendering in their unstyled default
+	// color against whatever background did or didn't also go dark.
+	background: rgba(53, 54, 58, 1);
 
 	.navbar-brand {
 		margin-left: 1.25rem;
 
 		.picon {
+			color: #fff;
 			cursor: pointer;
 		}
 
@@ -1670,16 +1676,6 @@ export default {
 		.dropdown-content {
 			max-height: calc(100vh - 6rem);
 			overflow-y: auto;
-		}
-	}
-}
-
-@media (prefers-color-scheme: dark) {
-	.top-bar {
-		background: rgba(53, 54, 58, 1);
-
-		.picon {
-			color: #fff;
 		}
 	}
 }
