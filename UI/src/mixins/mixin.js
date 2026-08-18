@@ -41,7 +41,10 @@ const filePanelMap = {
 	"video-player": union(typeMap['video-x-generic'], typeMap['audio-x-generic']),
 	"image-viewer": typeMap['image-x-generic'],
 	"doc-viewer": union(typeMap['application-vnd.ms-word']),
-	"excel-viewer": union(typeMap['application-vnd.ms-excel']),
+	// csv is its own viewer (plain-text table, not an XLSX-binary parser) -
+	// excluded here so it doesn't also match excel-viewer.
+	"excel-viewer": typeMap['application-vnd.ms-excel'].filter(ext => ext !== 'csv'),
+	"csv-viewer": ['csv'],
 	"pdf-viewer": typeMap['application-pdf'],
 }
 export const wallpaperType = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'svg']

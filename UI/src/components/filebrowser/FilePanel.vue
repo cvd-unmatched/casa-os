@@ -287,6 +287,7 @@ export default {
 		MarkDownEditor: () => import("./viewers/MarkdownEditor.vue"),
 		DocViewer: () => import("./viewers/DocViewer.vue"),
 		ExcelViewer: () => import("./viewers/ExcelViewer.vue"),
+		CsvViewer: () => import("./viewers/CsvViewer.vue"),
 		PdfViewer: () => import("./viewers/PdfViewer.vue"),
 		EmptyHolder,
 		ErrorHolder,
