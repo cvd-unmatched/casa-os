@@ -760,7 +760,7 @@ export default {
     @mouseleave="hover = true" @mouseover="hover = true"
   >
     <!-- Action Button Start -->
-    <div v-if="item.app_type !== 'system' && !isContainerApp && !isUninstalling" class="action-btn">
+    <div v-if="item.app_type !== 'system' && !isUninstalling" class="action-btn">
       <b-dropdown
         ref="dro" :mobile-modal="false" :triggers="['contextmenu', 'click']" animation="fade1"
         append-to-body aria-role="list" class="app-card-drop" :position="dropdownPosition"

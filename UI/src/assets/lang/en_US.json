@@ -257,6 +257,7 @@
   "Click icon to import.": "Click icon to import.",
   "Drag icons to sort.": "Drag icons to sort.",
   "Import to CasaOS": "Import to CamaOS",
+  "Could not load this container's details - it may have corrupted state Docker can't fully read.": "Could not load this container's details - it may have corrupted state Docker can't fully read.",
   "Existing Docker Apps": "Existing Docker apps",
   "[Optional]": "Optional",
   "Notice: If there are multiple services, only the first set can be analyzed correctly": "When there are more than 1 containers specified in the Docker compose file, only the first one will be imported for now.",

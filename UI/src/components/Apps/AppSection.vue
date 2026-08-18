@@ -502,7 +502,8 @@ export default {
 				id: group.id,
 				name: group.name,
 				appNames: group.appNames,
-				color: group.color
+				color: group.color,
+				theme: group.theme
 			}))
 
 			const keyOf = item => (item.__folder ? `folder:${item.id}` : item.name)
@@ -844,13 +845,24 @@ export default {
 		async showContainerPanel (item) {
 			this.$messageBus('appsexsiting_open', item.name)
 			let id = item.name
-			const networks = await this.$api.container.getNetworks()
+			let networks
+			let ret
+			try {
+				networks = await this.$api.container.getNetworks()
+				ret = await this.$api.container.getInfo(id)
+			}
+			catch (error) {
+				this.$buefy.toast.open({
+					message: this.$t('Could not load this container\'s details - it may have corrupted state Docker can\'t fully read.'),
+					type: 'is-danger',
+				})
+				return
+			}
 			const memory = this.$store.state.hardwareInfo.mem
 			const configData = {
 				networks: networks.data.data,
 				memory: memory
 			}
-			const ret = await this.$api.container.getInfo(id)
 			this.$buefy.modal.open({
 				parent: this,
 				component: AppPanel,
