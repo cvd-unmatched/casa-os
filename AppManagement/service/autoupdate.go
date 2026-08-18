@@ -19,16 +19,17 @@ import (
 // AutoUpdateAppStatus is what GET /v1/autoupdate/apps serves - one row per
 // app (not per service - a multi-service compose app is summarized by
 // whichever service has an update available, or its first service if none
-// do, since the UI's policy control is per-app, not per-service).
+// do, since the UI's controls are per-app, not per-service).
 type AutoUpdateAppStatus struct {
-	Name            string            `json:"name"`
-	AppType         string            `json:"appType"` // "v1" | "v2"
-	CurrentImage    string            `json:"currentImage"`
-	CurrentTag      string            `json:"currentTag"`
-	LatestKnownTag  string            `json:"latestKnownTag"`
-	UpdateAvailable bool              `json:"updateAvailable"`
-	Policy          autoupdate.Policy `json:"policy"`
-	IsUncontrolled  bool              `json:"isUncontrolled"`
+	Name            string `json:"name"`
+	AppType         string `json:"appType"` // "v1" | "v2"
+	CurrentImage    string `json:"currentImage"`
+	CurrentTag      string `json:"currentTag"`
+	LatestKnownTag  string `json:"latestKnownTag"`
+	UpdateAvailable bool   `json:"updateAvailable"`
+	AutoUpdate      bool   `json:"autoUpdate"`
+	Notify          bool   `json:"notify"`
+	IsUncontrolled  bool   `json:"isUncontrolled"`
 }
 
 var (
@@ -146,7 +147,7 @@ func RecheckApp(ctx context.Context, appName string) (AutoUpdateAppStatus, error
 func checkAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *autoupdate.Config, notified *sync.Map) AutoUpdateAppStatus {
 	row, newImageByService := checkComposeAppForUpdates(ctx, app, cfg, notified)
 
-	if !row.IsUncontrolled && len(newImageByService) > 0 && row.Policy == autoupdate.PolicyAuto {
+	if !row.IsUncontrolled && len(newImageByService) > 0 && row.AutoUpdate {
 		if err := app.UpdateImages(ctx, newImageByService); err != nil {
 			logger.Error("autoupdate: failed to apply compose app update", zap.Error(err), zap.String("app", app.Name))
 			webhook.Send("image_update_failed", "Auto-update failed",
@@ -171,12 +172,13 @@ func checkComposeApp(ctx context.Context, app *ComposeApp, cfg *autoupdate.Confi
 
 func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoupdate.Config, notified *sync.Map) (AutoUpdateAppStatus, map[string]string) {
 	uncontrolled := isComposeAppUncontrolled(app)
-	policy := autoupdate.PolicyFor(cfg, app.Name)
+	settings := autoupdate.SettingsFor(cfg, app.Name)
 
 	row := AutoUpdateAppStatus{
 		Name:           app.Name,
 		AppType:        "v2",
-		Policy:         policy,
+		AutoUpdate:     settings.AutoUpdate,
+		Notify:         settings.Notify,
 		IsUncontrolled: uncontrolled,
 	}
 	newImageByService := map[string]string{}
@@ -206,7 +208,9 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 			row.LatestKnownTag = newTag
 			row.UpdateAvailable = true
 			newImageByService[svc.Name] = img + ":" + newTag
-			notifyImageUpdate(app.Name, svc.Name, newTag, notified)
+			if settings.Notify {
+				notifyImageUpdate(app.Name, svc.Name, newTag, notified)
+			}
 		} else if row.LatestKnownTag == "" {
 			row.LatestKnownTag = newTag
 		}
@@ -229,7 +233,7 @@ func isComposeAppUncontrolled(app *ComposeApp) bool {
 func checkAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, cfg *autoupdate.Config, notified *sync.Map) AutoUpdateAppStatus {
 	row := checkStandaloneAppForUpdates(ctx, app, cfg, notified)
 
-	if !row.UpdateAvailable || row.IsUncontrolled || row.Policy != autoupdate.PolicyAuto {
+	if !row.UpdateAvailable || row.IsUncontrolled || !row.AutoUpdate {
 		return row
 	}
 
@@ -262,13 +266,15 @@ func checkStandaloneApp(ctx context.Context, app model.MyAppList, cfg *autoupdat
 
 func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg *autoupdate.Config, notified *sync.Map) AutoUpdateAppStatus {
 	_, currentTag := docker.ExtractImageAndTag(app.Image)
+	settings := autoupdate.SettingsFor(cfg, app.Name)
 
 	row := AutoUpdateAppStatus{
 		Name:           app.Name,
 		AppType:        "v1",
 		CurrentImage:   app.Image,
 		CurrentTag:     currentTag,
-		Policy:         autoupdate.PolicyFor(cfg, app.Name),
+		AutoUpdate:     settings.AutoUpdate,
+		Notify:         settings.Notify,
 		IsUncontrolled: app.IsUncontrolled,
 	}
 
@@ -284,7 +290,9 @@ func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg 
 
 	if newTag != currentTag {
 		row.UpdateAvailable = true
-		notifyImageUpdate(app.Name, app.Name, newTag, notified)
+		if settings.Notify {
+			notifyImageUpdate(app.Name, app.Name, newTag, notified)
+		}
 	}
 
 	return row

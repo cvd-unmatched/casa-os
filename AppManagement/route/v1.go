@@ -89,7 +89,7 @@ func InitV1Router() http.Handler {
 		v1AutoUpdateGroup.Use()
 		{
 			v1AutoUpdateGroup.GET("/apps", v1.ListAutoUpdateStatus)
-			v1AutoUpdateGroup.PUT("/apps/:name/policy", v1.SetAutoUpdatePolicy)
+			v1AutoUpdateGroup.PUT("/apps/:name/settings", v1.SetAutoUpdateSettings)
 			v1AutoUpdateGroup.POST("/apps/:name/recheck", v1.RecheckApp)
 		}
 	}

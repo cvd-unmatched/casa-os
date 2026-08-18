@@ -25,33 +25,23 @@ func ListAutoUpdateStatus(ctx echo.Context) error {
 	})
 }
 
-type setAutoUpdatePolicyRequest struct {
-	Policy autoupdate.Policy `json:"policy"`
-}
-
-// @Summary set an app's auto-update policy (auto/notify/off)
+// @Summary set an app's auto-update and notify settings
 // @Produce  application/json
 // @Accept application/json
 // @Tags autoupdate
 // @Param  name path string true "app name"
 // @Security ApiKeyAuth
 // @Success 200 {string} string "ok"
-// @Router /autoupdate/apps/{name}/policy [put]
-func SetAutoUpdatePolicy(ctx echo.Context) error {
+// @Router /autoupdate/apps/{name}/settings [put]
+func SetAutoUpdateSettings(ctx echo.Context) error {
 	name := ctx.Param("name")
 	if name == "" {
 		return ctx.JSON(http.StatusBadRequest, modelCommon.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS)})
 	}
 
-	req := setAutoUpdatePolicyRequest{}
+	req := autoupdate.AppSettings{}
 	if err := (&echo.DefaultBinder{}).BindBody(ctx, &req); err != nil {
 		return ctx.JSON(http.StatusBadRequest, modelCommon.Result{Success: common_err.INVALID_PARAMS, Message: err.Error()})
-	}
-
-	switch req.Policy {
-	case autoupdate.PolicyAuto, autoupdate.PolicyNotify, autoupdate.PolicyOff:
-	default:
-		return ctx.JSON(http.StatusBadRequest, modelCommon.Result{Success: common_err.INVALID_PARAMS, Message: "policy must be one of: auto, notify, off"})
 	}
 
 	cfg, err := autoupdate.Load()
@@ -59,10 +49,10 @@ func SetAutoUpdatePolicy(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, modelCommon.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
 	}
 
-	if cfg.AppPolicies == nil {
-		cfg.AppPolicies = map[string]autoupdate.Policy{}
+	if cfg.Apps == nil {
+		cfg.Apps = map[string]autoupdate.AppSettings{}
 	}
-	cfg.AppPolicies[name] = req.Policy
+	cfg.Apps[name] = req
 
 	if err := autoupdate.Save(cfg); err != nil {
 		return ctx.JSON(http.StatusInternalServerError, modelCommon.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
