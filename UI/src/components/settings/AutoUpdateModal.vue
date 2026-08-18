@@ -6,7 +6,17 @@ export default {
 			isLoading: true,
 			apps: [],
 			rechecking: null,
+			search: '',
 		}
+	},
+	computed: {
+		visibleApps() {
+			const query = this.search.trim().toLowerCase()
+			const filtered = query
+				? this.apps.filter(app => app.displayName.toLowerCase().includes(query))
+				: this.apps
+			return [...filtered].sort((a, b) => a.displayName.localeCompare(b.displayName))
+		},
 	},
 	created() {
 		this.load()
@@ -68,14 +78,22 @@ export default {
 				{{ $t('Checks each app\'s image against its registry for a newer version. Notify and Auto-update are independent - nothing auto-updates unless you check that box, and you can leave notifications on or off separately.') }}
 			</p>
 
+			<b-input
+				v-if="apps.length > 0" v-model="search" :placeholder="$t('Search apps…')"
+				icon="magnify" class="mb-4" size="is-small" expanded
+			/>
+
 			<b-loading v-model="isLoading" :is-full-page="false" />
 
 			<template v-if="!isLoading">
 				<div v-if="apps.length === 0" class="has-text-grey-100 is-size-7 py-2">
 					{{ $t('No managed apps found.') }}
 				</div>
+				<div v-else-if="visibleApps.length === 0" class="has-text-grey-100 is-size-7 py-2">
+					{{ $t('No apps match your search.') }}
+				</div>
 
-				<div v-for="app in apps" :key="app.appType + ':' + app.name" class="app-row mb-2 p-3">
+				<div v-for="app in visibleApps" :key="app.appType + ':' + app.name" class="app-row mb-2 p-3">
 					<div class="is-flex is-align-items-center">
 						<span class="is-flex-grow-1 has-text-weight-semibold one-line" :title="app.currentImage">{{ app.displayName }}</span>
 						<b-icon
