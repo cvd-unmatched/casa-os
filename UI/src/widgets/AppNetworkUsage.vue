@@ -135,6 +135,10 @@ export default {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		// a flex child defaults to min-width: auto, which blocks shrinking
+		// below its content's natural width - without this, a long app
+		// name pushes past its row instead of actually ellipsizing.
+		min-width: 0;
 	}
 
 	.connections-section {

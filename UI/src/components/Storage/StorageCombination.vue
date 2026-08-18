@@ -1,7 +1,7 @@
 <template>
 	<div v-show="showCombination" class="mb-5 mt-2 pt-5 pb-5 border-1 combination-box">
 		<div class="is-relative is-flex is-justify-content-center top--2rem">
-			<div class="pr-4 pl-4 has-background-white">CamaOS HD</div>
+			<div class="pr-4 pl-4 combination-label-bg">CamaOS HD</div>
 		</div>
 		<div class="is-flex ">
 			<div class="is-flex-grow-1">
@@ -168,19 +168,23 @@ export default {
 	width: 100%
 }
 
+.combination-label-bg {
+	background-color: $scheme-main-ter;
+}
+
 .combination-box {
-	background-color: hsla(208, 16%, 98%, 1);
-	border: 1px solid hsla(208, 16%, 91%, 1);
+	background-color: $scheme-main-ter;
+	border: 1px solid $border;
 	border-radius: 12px;
 
 	.combination-title {
-		background-color: hsla(208, 16%, 98%, 1);
-		border: 1px solid hsla(208, 16%, 91%, 1);
+		background-color: $scheme-main-ter;
+		border: 1px solid $border;
 		border-radius: 4px;
 	}
 
 	.tag {
-		background-color: hsla(208, 16%, 98%, 1);
+		background-color: $scheme-main-ter;
 		border: 1px solid hsla(208, 100%, 45%, 1);
 		color: hsla(208, 100%, 45%, 1);
 		padding: 2px 6px;
