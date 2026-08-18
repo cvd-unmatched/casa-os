@@ -893,7 +893,8 @@ export default {
         ref="settingsDrop"
         animation="fade1"
         aria-role="list"
-        class="navbar-item"
+        class="navbar-item settings-dropdown"
+        :mobile-modal="false"
         @active-change="onOpen"
       >
         <template #trigger>
@@ -1381,6 +1382,18 @@ export default {
 	to {
 		transform: rotate(360deg);
 	}
+}
+
+// The shared .dropdown-menu .dropdown-content rule (_dropdown.scss) caps
+// max-height at a flat 24rem, sized for short menus like "Move to folder" -
+// the settings panel has grown well past that (Update, Update from
+// repository, Restart/Shutdown, Webhooks, ...) and ends up scrolling almost
+// immediately even on a normal desktop screen with plenty of room left.
+// Size it against the actual viewport instead of a fixed rem value, so it
+// only scrolls when it genuinely doesn't fit - overflow-y: auto (inherited
+// from _dropdown.scss) is still there as a safety net for small screens.
+.settings-dropdown .dropdown-content {
+	max-height: calc(100vh - 6rem) !important;
 }
 
 ._is-large {

@@ -22,6 +22,12 @@ func GetCustomizationPostData(info types.ContainerJSON) model.CustomizationPostD
 	var port model.PortArray
 
 	for k, v := range info.HostConfig.PortBindings {
+		// a port can be reserved (present in PortBindings) with no actual
+		// host binding yet assigned - v is an empty slice in that case, not
+		// missing from the map, so indexing v[0] unconditionally panics.
+		if len(v) == 0 {
+			continue
+		}
 		temp := model.PortMap{
 			CommendPort:   v[0].HostPort,
 			ContainerPort: k.Port(),
