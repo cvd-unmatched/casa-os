@@ -130,6 +130,11 @@
     padding: 0;
     transition: all 0.2s;
     margin: 0 0.25rem;
+    // previously only set on :hover, via &:before below - left the glyph
+    // in the browser's default (dark) color otherwise, invisible against
+    // this fork's dark panels until hovered (e.g. the per-app Settings
+    // panel's Terminal/Export buttons).
+    color: $text-strong;
 
     &:before {
         transition: all 0.2s;

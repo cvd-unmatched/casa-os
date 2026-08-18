@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/IceWhaleTech/CasaOS-AppManagement/common"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/model"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/autoupdate"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/docker"
@@ -21,8 +22,15 @@ import (
 // whichever service has an update available, or its first service if none
 // do, since the UI's controls are per-app, not per-service).
 type AutoUpdateAppStatus struct {
+	// Name is the internal identifier (compose project name / container
+	// name) - what policy lookups and the /apps/:name/* API are keyed on.
+	// For an app installed without an explicit `name:` in its compose file,
+	// this is a Docker-style random string (e.g. "friendly_jeanie") - same
+	// one the dashboard itself falls back to for that app, not something
+	// unique to this feature.
 	Name            string `json:"name"`
-	AppType         string `json:"appType"` // "v1" | "v2"
+	DisplayName     string `json:"displayName"` // the dashboard's app title - same as Name when no nicer title is stored
+	AppType         string `json:"appType"`     // "v1" | "v2"
 	CurrentImage    string `json:"currentImage"`
 	CurrentTag      string `json:"currentTag"`
 	LatestKnownTag  string `json:"latestKnownTag"`
@@ -145,11 +153,11 @@ func checkAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *aut
 		if err := app.UpdateImages(ctx, newImageByService); err != nil {
 			logger.Error("autoupdate: failed to apply compose app update", zap.Error(err), zap.String("app", app.Name))
 			webhook.Send("image_update_failed", "Auto-update failed",
-				fmt.Sprintf("Failed to auto-update %s: %s", app.Name, err.Error()),
+				fmt.Sprintf("Failed to auto-update %s: %s", row.DisplayName, err.Error()),
 				map[string]string{"app": app.Name})
 		} else {
 			webhook.Send("image_update_applied", "Auto-update applied",
-				fmt.Sprintf("%s was auto-updated to %s", app.Name, row.LatestKnownTag),
+				fmt.Sprintf("%s was auto-updated to %s", row.DisplayName, row.LatestKnownTag),
 				map[string]string{"app": app.Name, "tag": row.LatestKnownTag})
 		}
 	}
@@ -170,6 +178,7 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 
 	row := AutoUpdateAppStatus{
 		Name:           app.Name,
+		DisplayName:    composeAppDisplayName(app),
 		AppType:        "v2",
 		AutoUpdate:     settings.AutoUpdate,
 		Notify:         settings.Notify,
@@ -203,7 +212,7 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 			row.UpdateAvailable = true
 			newImageByService[svc.Name] = img + ":" + newTag
 			if settings.Notify {
-				notifyImageUpdate(app.Name, svc.Name, newTag, notified)
+				notifyImageUpdate(app.Name, row.DisplayName, svc.Name, newTag, notified)
 			}
 		} else if row.LatestKnownTag == "" {
 			row.LatestKnownTag = newTag
@@ -211,6 +220,21 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 	}
 
 	return row, newImageByService
+}
+
+// composeAppDisplayName mirrors the same Title resolution the dashboard's
+// own app grid uses (WebAppGridItemAdapterV2) - falls back to the raw
+// compose project name (e.g. a random "friendly_jeanie"-style name) when
+// no nicer title was ever stored, same as the dashboard does for that case.
+func composeAppDisplayName(app *ComposeApp) string {
+	storeInfo, err := app.StoreInfo(false)
+	if err != nil || storeInfo == nil {
+		return app.Name
+	}
+	if title, ok := storeInfo.Title[common.DefaultLanguage]; ok && title != "" {
+		return title
+	}
+	return app.Name
 }
 
 func isComposeAppUncontrolled(app *ComposeApp) bool {
@@ -263,7 +287,11 @@ func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg 
 	settings := autoupdate.SettingsFor(cfg, app.Name)
 
 	row := AutoUpdateAppStatus{
-		Name:           app.Name,
+		Name: app.Name,
+		// v1's app.Name is already resolved via GetContainerAppList's own
+		// "name" label preference (falls back to the container name) - no
+		// separate store-title lookup needed here like the v2 path has.
+		DisplayName:    app.Name,
 		AppType:        "v1",
 		CurrentImage:   app.Image,
 		CurrentTag:     currentTag,
@@ -285,7 +313,7 @@ func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg 
 	if newTag != currentTag {
 		row.UpdateAvailable = true
 		if settings.Notify {
-			notifyImageUpdate(app.Name, app.Name, newTag, notified)
+			notifyImageUpdate(app.Name, row.DisplayName, app.Name, newTag, notified)
 		}
 	}
 
@@ -349,13 +377,13 @@ func checkNewestTag(ctx context.Context, image, currentTag string) (string, bool
 	return autoupdate.NewestTag(tags, currentVersion.Prerelease() != "")
 }
 
-func notifyImageUpdate(appName, serviceName, newTag string, notified *sync.Map) {
+func notifyImageUpdate(appName, displayName, serviceName, newTag string, notified *sync.Map) {
 	key := appName + ":" + serviceName + ":" + newTag
 	if _, already := notified.Load(key); already {
 		return
 	}
 	notified.Store(key, true)
 	webhook.Send("image_update", "Update available",
-		fmt.Sprintf("A new image version (%s) is available for %s", newTag, appName),
+		fmt.Sprintf("A new image version (%s) is available for %s", newTag, displayName),
 		map[string]string{"app": appName, "service": serviceName, "tag": newTag})
 }
