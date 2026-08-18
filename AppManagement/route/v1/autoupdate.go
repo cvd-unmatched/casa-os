@@ -21,7 +21,7 @@ func ListAutoUpdateStatus(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, modelCommon.Result{
 		Success: common_err.SUCCESS,
 		Message: common_err.GetMsg(common_err.SUCCESS),
-		Data:    service.GetAutoUpdateStatus(),
+		Data:    service.GetAutoUpdateStatus(context.Background()),
 	})
 }
 

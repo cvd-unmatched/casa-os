@@ -46,15 +46,86 @@ var (
 	autoUpdateStatusCache []AutoUpdateAppStatus
 )
 
-// GetAutoUpdateStatus returns the last-computed status list, populated by
-// the cron tick (see CheckAndApplyAutoUpdates) - the API handler reads
-// this rather than hitting registries live on every page load.
-func GetAutoUpdateStatus() []AutoUpdateAppStatus {
+// GetAutoUpdateStatus reconciles the cached per-app status (populated by
+// the cron tick - see CheckAndApplyAutoUpdates) against the CURRENT live
+// app list, rather than just serving whatever's cached: an app installed
+// since the last cron tick would otherwise be invisible for up to an hour,
+// and an uninstalled app would otherwise linger in the response forever.
+// Doesn't hit any registry itself - a newly installed app gets a cheap,
+// local-only placeholder row (current image/tag, no latest-tag info yet)
+// until the next cron tick actually checks it.
+func GetAutoUpdateStatus(ctx context.Context) []AutoUpdateAppStatus {
+	cached := map[string]AutoUpdateAppStatus{}
 	autoUpdateStatusMu.Lock()
-	defer autoUpdateStatusMu.Unlock()
-	out := make([]AutoUpdateAppStatus, len(autoUpdateStatusCache))
-	copy(out, autoUpdateStatusCache)
+	for _, s := range autoUpdateStatusCache {
+		cached[s.AppType+":"+s.Name] = s
+	}
+	autoUpdateStatusMu.Unlock()
+
+	cfg, err := autoupdate.Load()
+	if err != nil {
+		cfg = &autoupdate.Config{Apps: map[string]autoupdate.AppSettings{}}
+	}
+
+	var out []AutoUpdateAppStatus
+
+	composeApps, err := MyService.Compose().List(ctx)
+	if err != nil {
+		logger.Error("autoupdate: failed to list compose apps for status", zap.Error(err))
+	}
+	for _, app := range composeApps {
+		if s, ok := cached["v2:"+app.Name]; ok {
+			out = append(out, s)
+			continue
+		}
+		out = append(out, placeholderComposeAppStatus(app, cfg))
+	}
+
+	casaOSApps, _ := MyService.Docker().GetContainerAppList(nil, nil, nil)
+	if casaOSApps != nil {
+		for _, app := range *casaOSApps {
+			if s, ok := cached["v1:"+app.Name]; ok {
+				out = append(out, s)
+				continue
+			}
+			out = append(out, placeholderStandaloneAppStatus(app, cfg))
+		}
+	}
+
 	return out
+}
+
+func placeholderComposeAppStatus(app *ComposeApp, cfg *autoupdate.Config) AutoUpdateAppStatus {
+	uncontrolled := isComposeAppUncontrolled(app)
+	settings := autoupdate.SettingsFor(cfg, app.Name)
+	row := AutoUpdateAppStatus{
+		Name:           app.Name,
+		DisplayName:    composeAppDisplayName(app),
+		AppType:        "v2",
+		AutoUpdate:     settings.AutoUpdate,
+		Notify:         settings.Notify,
+		IsUncontrolled: uncontrolled,
+	}
+	if image := composeAppMainServiceImage(app); image != "" {
+		row.CurrentImage = image
+		_, row.CurrentTag = docker.ExtractImageAndTag(image)
+	}
+	return row
+}
+
+func placeholderStandaloneAppStatus(app model.MyAppList, cfg *autoupdate.Config) AutoUpdateAppStatus {
+	_, currentTag := docker.ExtractImageAndTag(app.Image)
+	settings := autoupdate.SettingsFor(cfg, app.Name)
+	return AutoUpdateAppStatus{
+		Name:           app.Name,
+		DisplayName:    app.Name,
+		AppType:        "v1",
+		CurrentImage:   app.Image,
+		CurrentTag:     currentTag,
+		AutoUpdate:     settings.AutoUpdate,
+		Notify:         settings.Notify,
+		IsUncontrolled: app.IsUncontrolled,
+	}
 }
 
 func updateAutoUpdateStatusCacheEntry(entry AutoUpdateAppStatus) {
