@@ -175,7 +175,7 @@ export default {
 </script>
 <style lang="scss" scoped>
 .tag {
-	background-color: hsla(208, 16%, 98%, 1);
+	background-color: $scheme-main-ter;
 	border: 1px solid hsla(208, 100%, 45%, 1);
 	color: hsla(208, 100%, 45%, 1);
 	padding: 2px 6px;
@@ -183,7 +183,7 @@ export default {
 }
 
 .background-item {
-	background-color: hsla(208, 16%, 98%, 1);
+	background-color: $scheme-main-ter;
 	border-radius: 0.5rem;
 }
 </style>

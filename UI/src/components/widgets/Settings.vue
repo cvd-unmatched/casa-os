@@ -20,17 +20,20 @@
 				</template>
 				<b-dropdown-item :focusable="false" aria-role="menu-item" class="has-text-white has-text-left" custom>
 					<h2 class="title is-5 has-text-white">{{ $t('Widgets Settings') }}</h2>
-					<div v-for="(item, index) in settingsData" :key="`setting_${index}`"
-						class="is-flex is-align-items-center item">
-						<div class="is-flex is-align-items-center is-flex-grow-1">
-							<b-icon :icon="getIcon(item.name)" pack="casa" class="mr-2"></b-icon>
-							<b>{{ $t(getTitle(item.name)) }}</b>
+					<draggable v-model="settingsData" handle=".drag-handle" @end="handleInput">
+						<div v-for="(item, index) in settingsData" :key="`setting_${index}`"
+							class="is-flex is-align-items-center item">
+							<b-icon class="drag-handle mr-2 is-clickable" icon="drag-vertical" pack="mdi" size="is-small"></b-icon>
+							<div class="is-flex is-align-items-center is-flex-grow-1">
+								<b-icon :icon="getIcon(item.name)" pack="casa" class="mr-2"></b-icon>
+								<b>{{ $t(getTitle(item.name)) }}</b>
+							</div>
+							<b-field>
+								<b-switch v-model="item.show" class="is-flex-direction-row-reverse mr-0" size="is-small"
+									type="is-dark" @input="handleInput"></b-switch>
+							</b-field>
 						</div>
-						<b-field>
-							<b-switch v-model="item.show" class="is-flex-direction-row-reverse mr-0" size="is-small"
-								type="is-dark" @input="handleInput"></b-switch>
-						</b-field>
-					</div>
+					</draggable>
 				</b-dropdown-item>
 			</b-dropdown>
 		</div>
@@ -40,6 +43,7 @@
 
 <script>
 import find from 'lodash/find';
+import draggable from 'vuedraggable'
 
 const widgetsComponents = require.context(
 	'@/widgets',
@@ -51,6 +55,9 @@ const widgetsComponents = require.context(
 export default {
 	// eslint-disable-next-line vue/multi-word-component-names
 	name: "settings",
+	components: {
+		draggable,
+	},
 	data() {
 		return {
 			apps: [],
