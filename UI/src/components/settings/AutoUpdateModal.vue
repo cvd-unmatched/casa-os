@@ -1,17 +1,10 @@
 <script>
-const POLICIES = [
-	{ key: 'notify', label: 'Notify only' },
-	{ key: 'auto', label: 'Auto-update' },
-	{ key: 'off', label: 'Off' },
-]
-
 export default {
 	name: 'AutoUpdateModal',
 	data() {
 		return {
 			isLoading: true,
 			apps: [],
-			policies: POLICIES,
 			rechecking: null,
 		}
 	},
@@ -33,15 +26,15 @@ export default {
 			}
 		},
 
-		async setPolicy(app, policy) {
-			const previous = app.policy
-			app.policy = policy
+		async setSettings(app, changes) {
+			const previous = { autoUpdate: app.autoUpdate, notify: app.notify }
+			Object.assign(app, changes)
 			try {
-				await this.$api.autoupdate.setPolicy(app.name, policy)
+				await this.$api.autoupdate.setSettings(app.name, { autoUpdate: app.autoUpdate, notify: app.notify })
 			}
 			catch (error) {
-				app.policy = previous
-				this.$buefy.toast.open({ message: this.$t('Could not save policy for {name}.', { name: app.name }), type: 'is-danger' })
+				Object.assign(app, previous)
+				this.$buefy.toast.open({ message: this.$t('Could not save settings for {name}.', { name: app.name }), type: 'is-danger' })
 			}
 		},
 
@@ -72,7 +65,7 @@ export default {
 		</header>
 		<section class="modal-card-body">
 			<p class="mb-4 has-text-grey">
-				{{ $t('Checks each app\'s image against its registry for a newer version. Nothing auto-updates unless you set it to "Auto-update" - everything else defaults to notify-only.') }}
+				{{ $t('Checks each app\'s image against its registry for a newer version. Notify and Auto-update are independent - nothing auto-updates unless you check that box, and you can leave notifications on or off separately.') }}
 			</p>
 
 			<b-loading v-model="isLoading" :is-full-page="false" />
@@ -89,11 +82,18 @@ export default {
 							class="is-clickable mr-2" icon="restart-outline" pack="casa" size="is-small"
 							:class="{ spinning: rechecking === app.name }" @click.native="recheck(app)"
 						/>
-						<b-select :value="app.policy" size="is-small" @input="setPolicy(app, $event)">
-							<option v-for="p in policies" :key="p.key" :value="p.key">
-								{{ $t(p.label) }}
-							</option>
-						</b-select>
+						<b-checkbox
+							:value="app.notify" size="is-small" class="mr-3"
+							:disabled="app.isUncontrolled" @input="setSettings(app, { notify: $event })"
+						>
+							{{ $t('Notify') }}
+						</b-checkbox>
+						<b-checkbox
+							:value="app.autoUpdate" size="is-small"
+							:disabled="app.isUncontrolled" @input="setSettings(app, { autoUpdate: $event })"
+						>
+							{{ $t('Auto-update') }}
+						</b-checkbox>
 					</div>
 					<div class="is-size-7 has-text-grey mt-1">
 						<template v-if="app.isUncontrolled">
