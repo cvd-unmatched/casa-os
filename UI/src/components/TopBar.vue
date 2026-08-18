@@ -5,6 +5,7 @@ import PortPanel from './settings/PortPanel.vue'
 import UpdateModal from './settings/UpdateModal.vue'
 import IconStorageModal from './settings/IconStorageModal.vue'
 import WebhooksModal from './settings/WebhooksModal.vue'
+import AutoUpdateModal from './settings/AutoUpdateModal.vue'
 import SettingsVisibilityModal, { hiddenSettingsConfig } from './settings/SettingsVisibilityModal.vue'
 import { mixin } from '@/mixins/mixin'
 import messages from '@/assets/lang'
@@ -57,6 +58,7 @@ export default {
         release_notes: '',
       },
       checkingForkUpdate: false,
+      autoUpdatePendingCount: 0,
       latestText: 'Currently at the latest version',
       updateText: 'A new version is available!',
       isConvertingIcons: false,
@@ -163,6 +165,7 @@ export default {
   mounted() {
     this.checkVersion()
     this.checkForkVersion()
+    this.checkAutoUpdates()
     this.loadGithubStatus()
     this.loadHiddenSettings()
     this.getUserInfo()
@@ -292,6 +295,36 @@ export default {
         canCancel: ['escape', 'outside'],
         scroll: 'keep',
         animation: 'zoom-in',
+      })
+    },
+
+    /**
+     * @description: Refresh the pending-update count for the Auto-Update
+     * header badge. Best-effort - a failure here shouldn't show an error,
+     * it just leaves the badge at its last known count.
+     * @return {*} void
+     */
+    checkAutoUpdates() {
+      this.$api.autoupdate.listApps().then((res) => {
+        const apps = res.data.data || []
+        this.autoUpdatePendingCount = apps.filter(app => app.updateAvailable).length
+      }).catch(() => {})
+    },
+
+    showAutoUpdateModal() {
+      this.$buefy.modal.open({
+        parent: this,
+        component: AutoUpdateModal,
+        hasModalCard: true,
+        trapFocus: true,
+        canCancel: ['escape', 'outside'],
+        scroll: 'keep',
+        animation: 'zoom-in',
+        events: {
+          close: () => {
+            this.checkAutoUpdates()
+          },
+        },
       })
     },
 
@@ -1328,6 +1361,23 @@ export default {
         </b-tooltip>
       </div>
       <!-- Terminal  End -->
+
+      <!-- Auto-Update  Start -->
+      <div class="is-flex is-align-items-center ml-3 _fixed-height" @click="showAutoUpdateModal">
+        <b-tooltip
+          :active="!$store.state.isMobile"
+          :label="$t('Auto-Update')"
+          position="is-right"
+          style="height: 1.25rem"
+          type="is-dark"
+        >
+          <b-icon
+            :class="{ 'update-icon-dot': autoUpdatePendingCount > 0 }"
+            class="picon" icon="update-outline" pack="casa" size="is-20"
+          />
+        </b-tooltip>
+      </div>
+      <!-- Auto-Update  End -->
     </div>
 
     <div class="navbar-menu">

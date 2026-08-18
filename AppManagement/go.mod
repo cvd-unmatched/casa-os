@@ -3,6 +3,7 @@ module github.com/IceWhaleTech/CasaOS-AppManagement
 go 1.21
 
 require (
+	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/bluele/gcache v0.0.2
 	github.com/deepmap/oapi-codegen v1.12.4
 	github.com/docker/compose/v2 v2.23.3
@@ -30,7 +31,6 @@ require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect
 	github.com/AlecAivazis/survey/v2 v2.3.7 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
-	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/Microsoft/hcsshim v0.11.1 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect

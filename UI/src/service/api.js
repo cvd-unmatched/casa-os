@@ -1,5 +1,6 @@
 import appCategories from './appCategories.js';
 import apps from './apps.js';
+import autoupdate from './autoupdate.js';
 import batch from './batch.js';
 import container from './container.js';
 import disks from './disks.js';
@@ -19,6 +20,7 @@ export default {
 	// Apps
 	appCategories,
 	apps,
+	autoupdate,
 	container,
 	// Files
 	file,

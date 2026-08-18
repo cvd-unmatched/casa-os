@@ -84,6 +84,14 @@ func InitV1Router() http.Handler {
 			// v1ContainerGroup.GET("/info", v1.GetDockerDaemonConfiguration)
 			// v1ContainerGroup.PUT("/info", v1.PutDockerDaemonConfiguration)
 		}
+
+		v1AutoUpdateGroup := v1Group.Group("/autoupdate")
+		v1AutoUpdateGroup.Use()
+		{
+			v1AutoUpdateGroup.GET("/apps", v1.ListAutoUpdateStatus)
+			v1AutoUpdateGroup.PUT("/apps/:name/policy", v1.SetAutoUpdatePolicy)
+			v1AutoUpdateGroup.POST("/apps/:name/recheck", v1.RecheckApp)
+		}
 	}
 
 	return e
