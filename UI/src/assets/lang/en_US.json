@@ -60,6 +60,8 @@
   "Auto-Update": "Auto-Update",
   "Checks each app's image against its registry for a newer version. Notify and Auto-update are independent - nothing auto-updates unless you check that box, and you can leave notifications on or off separately.": "Checks each app's image against its registry for a newer version. Notify and Auto-update are independent - nothing auto-updates unless you check that box, and you can leave notifications on or off separately.",
   "No managed apps found.": "No managed apps found.",
+  "No apps match your search.": "No apps match your search.",
+  "Search apps…": "Search apps…",
   "Uncontrolled - not eligible for auto-update.": "Uncontrolled - not eligible for auto-update.",
   "Up to date": "Up to date",
   "no comparable version tags found": "no comparable version tags found",
