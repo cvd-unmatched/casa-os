@@ -257,6 +257,61 @@ func (a *ComposeApp) Update(ctx context.Context) error {
 	return nil
 }
 
+// UpdateImages rewrites each named service's image tag and applies it via
+// the same tail Update() uses (removeRuntime, marshal, StartUpgrade/
+// FinishUpgrade event wrapping, PullAndApply) - but without Update()'s
+// hard requirement on a matching app-store catalog entry (storeInfo.
+// StoreAppID), since the auto-updater's new tags come from a direct
+// registry lookup instead of the store. Used by the auto-updater for
+// compose apps that have no store match (e.g. installed via the GitHub
+// import flow) as well as ones that do.
+//
+// Unlike Update(), this runs synchronously and returns the real
+// success/failure of the pull+recreate - the caller (the auto-updater's
+// cron orchestration, itself already running off the request path) needs
+// that to decide which webhook event to fire, not just "the attempt was
+// launched".
+func (a *ComposeApp) UpdateImages(ctx context.Context, newImageByService map[string]string) error {
+	if len(a.ComposeFiles) <= 0 {
+		return ErrComposeFileNotFound
+	}
+
+	for name, newImage := range newImageByService {
+		if app := a.App(name); app != nil {
+			app.Image = newImage
+		}
+	}
+
+	removeRuntime(a)
+
+	newComposeYAML, err := yaml.Marshal(a)
+	if err != nil {
+		return err
+	}
+
+	eventProperties := common.PropertiesFromContext(ctx)
+	eventProperties[common.PropertyTypeAppName.Name] = a.Name
+
+	if err := a.UpdateEventPropertiesFromStoreInfo(eventProperties); err != nil {
+		logger.Info("failed to update event properties from store info", zap.Error(err), zap.String("name", a.Name))
+	}
+
+	go PublishEventWrapper(ctx, common.EventTypeAppUpdateBegin, nil)
+	defer PublishEventWrapper(ctx, common.EventTypeAppUpdateEnd, nil)
+
+	MyService.AppStoreManagement().StartUpgrade(a.Name)
+	defer MyService.AppStoreManagement().FinishUpgrade(a.Name)
+
+	if err := a.PullAndApply(ctx, newComposeYAML); err != nil {
+		go PublishEventWrapper(ctx, common.EventTypeAppUpdateError, map[string]string{
+			common.PropertyTypeMessage.Name: err.Error(),
+		})
+		return err
+	}
+
+	return nil
+}
+
 // TODO rename the function to service and add error return value
 func (a *ComposeApp) App(name string) *App {
 	if name == "" {

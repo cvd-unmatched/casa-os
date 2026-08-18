@@ -17,7 +17,6 @@ import (
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/common"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/config"
-	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/webhook"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/route"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/service"
 	"github.com/IceWhaleTech/CasaOS-Common/model"
@@ -100,14 +99,16 @@ func main() {
 			panic(err)
 		}
 
-		// webhook notifications: image-update checks reuse the existing
-		// IsUpdateAvailable digest comparison (already cached for 1h, so this
-		// interval always sees a fresh result) rather than re-implementing
-		// update detection. notifiedImageUpdates avoids re-notifying every
-		// hour for the same still-unapplied update.
+		// auto-updater: checks every CasaOS-managed app's images against
+		// their registries for a newer semver tag (not the old catalog-only
+		// digest comparison, which silently never checked apps installed
+		// outside the app store), notifies via webhook, and applies the
+		// update for any app whose policy is "auto" (see pkg/autoupdate).
+		// notifiedImageUpdates avoids re-notifying every hour for the same
+		// still-unapplied update.
 		notifiedImageUpdates := &sync.Map{}
 		if _, err := crontab.AddFunc("@every 1h", func() {
-			checkImageUpdates(ctx, notifiedImageUpdates)
+			service.CheckAndApplyAutoUpdates(ctx, notifiedImageUpdates)
 		}); err != nil {
 			panic(err)
 		}
@@ -152,6 +153,7 @@ func main() {
 			"/v1/apps",
 			"/v1/container",
 			"/v1/app-categories",
+			"/v1/autoupdate",
 			route.V1DocPath,
 			route.V2APIPath,
 			route.V2DocPath,
@@ -205,36 +207,3 @@ func main() {
 	}
 }
 
-// checkImageUpdates fires an image_update webhook the first time an update is
-// seen available for a compose app, and clears that "already notified" state
-// once the app is updated (or the update otherwise resolves) so a future
-// update gets its own notification.
-func checkImageUpdates(ctx context.Context, notified *sync.Map) {
-	apps, err := service.MyService.Compose().List(ctx)
-	if err != nil {
-		logger.Error("webhook: failed to list compose apps for update check", zap.Error(err))
-		return
-	}
-
-	for _, app := range apps {
-		isUpdate := service.MyService.AppStoreManagement().IsUpdateAvailable(app)
-		_, alreadyNotified := notified.Load(app.Name)
-
-		if !isUpdate {
-			notified.Delete(app.Name)
-			continue
-		}
-
-		if alreadyNotified {
-			continue
-		}
-
-		notified.Store(app.Name, true)
-		webhook.Send(
-			"image_update",
-			"Update available",
-			fmt.Sprintf("A new image version is available for %s", app.Name),
-			map[string]string{"app": app.Name},
-		)
-	}
-}
