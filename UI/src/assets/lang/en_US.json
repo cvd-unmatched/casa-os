@@ -68,6 +68,7 @@
   "Could not check {name} for updates.": "Could not check {name} for updates.",
   "Notify": "Notify",
   "Auto-update": "Auto-update",
+  "This file is empty.": "This file is empty.",
   "Public URL": "Public URL",
   "e.g. https://app.example.com": "e.g. https://app.example.com",
   "Open public URL": "Open public URL",

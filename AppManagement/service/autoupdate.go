@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -222,19 +223,56 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 	return row, newImageByService
 }
 
-// composeAppDisplayName mirrors the same Title resolution the dashboard's
-// own app grid uses (WebAppGridItemAdapterV2) - falls back to the raw
-// compose project name (e.g. a random "friendly_jeanie"-style name) when
-// no nicer title was ever stored, same as the dashboard does for that case.
+// composeAppDisplayName picks the most meaningful name available for a
+// compose app, in order:
+//  1. A real stored title (WebAppGridItemAdapterV2's same StoreInfo().Title
+//     the dashboard uses) - but only if it's not just app.Name copied
+//     verbatim, which is what SetTitle falls back to at install time for
+//     any compose file with no explicit top-level `name:` (the common case
+//     for GitHub-imported apps - confirmed none of this user's apps set
+//     that field, so this stored "title" is normally just the same random
+//     Docker-style project name, not an improvement).
+//  2. The main service's image repository name (e.g. "inventory" from
+//     ghcr.io/cvd-unmatched/inventory:1.6.0) - almost always more
+//     meaningful than a random project name, since it's literally the
+//     thing being run.
+//  3. The raw project name, as a last resort.
 func composeAppDisplayName(app *ComposeApp) string {
-	storeInfo, err := app.StoreInfo(false)
-	if err != nil || storeInfo == nil {
-		return app.Name
+	if storeInfo, err := app.StoreInfo(false); err == nil && storeInfo != nil {
+		if title, ok := storeInfo.Title[common.DefaultLanguage]; ok && title != "" && title != app.Name {
+			return title
+		}
 	}
-	if title, ok := storeInfo.Title[common.DefaultLanguage]; ok && title != "" {
-		return title
+	if image := composeAppMainServiceImage(app); image != "" {
+		return imageDisplayName(image)
 	}
 	return app.Name
+}
+
+// composeAppMainServiceImage returns the image of whichever service is
+// named "main_app" (the convention this user's installs consistently use -
+// e.g. container names like "imaginative_okem-main_app-1"), or the first
+// declared service if there's no such convention, or "" for an app with no
+// services at all.
+func composeAppMainServiceImage(app *ComposeApp) string {
+	for _, svc := range app.Services {
+		if svc.Name == "main_app" {
+			return svc.Image
+		}
+	}
+	if len(app.Services) > 0 {
+		return app.Services[0].Image
+	}
+	return ""
+}
+
+// imageDisplayName extracts the last path segment of an image reference -
+// "ghcr.io/cvd-unmatched/inventory:1.6.0" -> "inventory",
+// "linuxserver/mariadb:11.4.5" -> "mariadb", "postgres:16-alpine" -> "postgres".
+func imageDisplayName(image string) string {
+	img, _ := docker.ExtractImageAndTag(image)
+	parts := strings.Split(img, "/")
+	return parts[len(parts)-1]
 }
 
 func isComposeAppUncontrolled(app *ComposeApp) bool {
