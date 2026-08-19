@@ -121,6 +121,7 @@
   "Could not check for updates - try again shortly.": "Could not check for updates - try again shortly.",
   "Check for update": "Check for update",
   "{version} available.": "{version} available.",
+  "Already up to date ({version}).": "Already up to date ({version}).",
   "Delivered": "Delivered",
   "Mark delivered": "Mark delivered",
   "Track": "Track",
