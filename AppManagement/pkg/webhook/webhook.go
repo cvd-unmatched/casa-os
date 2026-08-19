@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/IceWhaleTech/CasaOS-Common/utils/constants"
@@ -128,27 +129,65 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
+// maxRateLimitRetries bounds how many times a single notification retries
+// after a 429 before giving up - Discord's webhook limit is roughly 5
+// requests/2s, so a burst of many auto-update notifications firing in the
+// same cron pass can trip it. Confirmed live: 8 consecutive 429s in under a
+// second, none retried, all silently dropped with only a log line.
+const maxRateLimitRetries = 3
+
 func sendOne(dest Destination, eventType, title, message string, fields map[string]string) {
 	body, err := payloadFor(dest.Type, eventType, title, message, fields)
 	if err != nil {
 		logger.Error("webhook: failed to build payload", zap.Error(err), zap.String("destination", dest.Name))
 		return
 	}
-	req, err := http.NewRequest(http.MethodPost, dest.URL, bytes.NewReader(body))
-	if err != nil {
-		logger.Error("webhook: failed to build request", zap.Error(err), zap.String("destination", dest.Name))
+
+	for attempt := 1; attempt <= maxRateLimitRetries; attempt++ {
+		req, err := http.NewRequest(http.MethodPost, dest.URL, bytes.NewReader(body))
+		if err != nil {
+			logger.Error("webhook: failed to build request", zap.Error(err), zap.String("destination", dest.Name))
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		res, err := httpClient.Do(req)
+		if err != nil {
+			logger.Error("webhook: request failed", zap.Error(err), zap.String("destination", dest.Name))
+			return
+		}
+		status := res.StatusCode
+		delay := retryAfterDelay(res.Header)
+		res.Body.Close()
+
+		if status < 300 {
+			return
+		}
+		if status == http.StatusTooManyRequests && attempt < maxRateLimitRetries {
+			time.Sleep(delay)
+			continue
+		}
+		logger.Error("webhook: destination returned an error status", zap.Int("status", status), zap.String("destination", dest.Name))
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-	res, err := httpClient.Do(req)
-	if err != nil {
-		logger.Error("webhook: request failed", zap.Error(err), zap.String("destination", dest.Name))
-		return
+}
+
+// retryAfterDelay reads the standard Retry-After header (seconds, which is
+// what Discord sends on a 429) and falls back to a conservative default
+// when it's missing or unparseable - capped so a misbehaving or malicious
+// destination can't stall a retry goroutine indefinitely.
+func retryAfterDelay(header http.Header) time.Duration {
+	const defaultDelay = 1 * time.Second
+	const maxDelay = 5 * time.Second
+
+	seconds, err := strconv.ParseFloat(header.Get("Retry-After"), 64)
+	if err != nil || seconds <= 0 {
+		return defaultDelay
 	}
-	defer res.Body.Close()
-	if res.StatusCode >= 300 {
-		logger.Error("webhook: destination returned an error status", zap.Int("status", res.StatusCode), zap.String("destination", dest.Name))
+	delay := time.Duration(seconds * float64(time.Second))
+	if delay > maxDelay {
+		return maxDelay
 	}
+	return delay
 }
 
 // SendTest sends a synchronous test notification to a single ad-hoc
