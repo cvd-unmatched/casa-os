@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/common"
@@ -112,10 +113,17 @@ func main() {
 		// sits empty for up to an hour after every restart, since
 		// cron.AddFunc's @every schedule only fires the NEXT occurrence,
 		// not immediately.
-		go service.CheckAndApplyAutoUpdates(ctx)
+		//
+		// runAutoUpdateCheck recovers from any panic in this new, less-
+		// proven code path - an unrecovered panic in a goroutine crashes
+		// the ENTIRE process (confirmed live: a bug here was taking down
+		// casaos-app-management in a restart loop, breaking everything
+		// this service does, not just auto-update). A bug should degrade
+		// this one feature for one cycle, not the whole service.
+		go runAutoUpdateCheck(ctx)
 
 		if _, err := crontab.AddFunc("@every 1h", func() {
-			service.CheckAndApplyAutoUpdates(ctx)
+			runAutoUpdateCheck(ctx)
 		}); err != nil {
 			panic(err)
 		}
@@ -212,5 +220,22 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// runAutoUpdateCheck runs service.CheckAndApplyAutoUpdates with panic
+// recovery - this is called from its own goroutine both at startup and on
+// every cron tick, and an unrecovered panic in a goroutine takes down the
+// entire process, not just this one check (confirmed live: a bug here put
+// casaos-app-management into a restart loop, breaking every feature this
+// service provides, not just auto-update, until diagnosed). Logs the full
+// stack on recovery so the underlying bug is still visible and fixable.
+func runAutoUpdateCheck(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("autoupdate: recovered from panic - see stack below",
+				zap.Any("panic", r), zap.String("stack", string(debug.Stack())))
+		}
+	}()
+	service.CheckAndApplyAutoUpdates(ctx)
 }
 

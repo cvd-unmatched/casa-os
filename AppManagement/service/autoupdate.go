@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -193,17 +194,42 @@ func CheckAndApplyAutoUpdates(ctx context.Context) {
 		logger.Error("autoupdate: failed to list compose apps", zap.Error(err))
 	}
 	for _, app := range composeApps {
-		updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyComposeApp(ctx, app, cfg))
+		safeCheckAndMaybeApplyComposeApp(ctx, app, cfg)
 		time.Sleep(pacingDelay)
 	}
 
 	casaOSApps, _ := MyService.Docker().GetContainerAppList(nil, nil, nil)
 	if casaOSApps != nil {
 		for _, app := range *casaOSApps {
-			updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyStandaloneApp(ctx, app, cfg))
+			safeCheckAndMaybeApplyStandaloneApp(ctx, app, cfg)
 			time.Sleep(pacingDelay)
 		}
 	}
+}
+
+// safeCheckAndMaybeApplyComposeApp recovers from a panic checking/applying
+// one app so it can't abort the rest of the run - main.go's runAutoUpdateCheck
+// already guards the whole cron tick, but without a per-app guard too, app
+// #5 out of 40 panicking would leave apps #6-40 unchecked for that entire
+// cycle.
+func safeCheckAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *autoupdate.Config) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("autoupdate: recovered from panic checking compose app",
+				zap.String("app", app.Name), zap.Any("panic", r), zap.String("stack", string(debug.Stack())))
+		}
+	}()
+	updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyComposeApp(ctx, app, cfg))
+}
+
+func safeCheckAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, cfg *autoupdate.Config) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("autoupdate: recovered from panic checking standalone app",
+				zap.String("app", app.Name), zap.Any("panic", r), zap.String("stack", string(debug.Stack())))
+		}
+	}()
+	updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyStandaloneApp(ctx, app, cfg))
 }
 
 // RecheckApp forces one synchronous, read-only registry check for a single

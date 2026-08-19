@@ -55,7 +55,14 @@ func EncodedConfigAuth(ref string) (string, error) {
 	}
 	configDir := os.Getenv("DOCKER_CONFIG")
 	if configDir == "" {
-		configDir = "/"
+		// cliconfig.Dir() is Docker CLI's own default resolution
+		// ($DOCKER_CONFIG, else $HOME/.docker) - the previous fallback of
+		// "/" looked for a config.json at the filesystem root, which never
+		// exists, so this never found real credentials (docker login's own
+		// ghcr.io/etc tokens) regardless of what was actually configured.
+		// Confirmed live: every ghcr.io/cvd-unmatched image failed tag
+		// listing with 403 because of this.
+		configDir = cliconfig.Dir()
 	}
 	configFile, err := cliconfig.Load(configDir)
 	if err != nil {
