@@ -162,6 +162,43 @@ func updateAutoUpdateStatusCacheEntry(entry AutoUpdateAppStatus) {
 	autoUpdateStatusCache = append(autoUpdateStatusCache, entry)
 }
 
+// previousAutoUpdateStatus returns the last cached status for (appType,
+// name), if any - used by carryForwardKnownUpdate below.
+func previousAutoUpdateStatus(appType, name string) (AutoUpdateAppStatus, bool) {
+	autoUpdateStatusMu.Lock()
+	defer autoUpdateStatusMu.Unlock()
+	for _, s := range autoUpdateStatusCache {
+		if s.AppType == appType && s.Name == name {
+			return s, true
+		}
+	}
+	return AutoUpdateAppStatus{}, false
+}
+
+// carryForwardKnownUpdate preserves a previously-detected available update
+// when this round's check came back empty-handed (a registry error, a rate
+// limit, or genuinely zero comparable tags this time) but the running app
+// hasn't changed since - whatever newer tag was found before is presumably
+// still out there, so a transient check hiccup shouldn't blank the panel
+// back to "no comparable version tags found" and lose that. Confirmed live
+// against ghcr.io/cvd-unmatched/movies flapping between "update available"
+// and "no comparable" across consecutive hourly ticks with nothing actually
+// changing registry-side. Never affects whether an update gets applied -
+// newImageByService (checkComposeAppForUpdates/checkStandaloneAppForUpdates
+// callers) only gets populated by a fresh, this-round confirmation.
+func carryForwardKnownUpdate(row AutoUpdateAppStatus) AutoUpdateAppStatus {
+	if row.UpdateAvailable || row.IsUncontrolled {
+		return row
+	}
+	prev, ok := previousAutoUpdateStatus(row.AppType, row.Name)
+	if !ok || !prev.UpdateAvailable || prev.CurrentTag != row.CurrentTag {
+		return row
+	}
+	row.LatestKnownTag = prev.LatestKnownTag
+	row.UpdateAvailable = true
+	return row
+}
+
 // pacingDelay is the minimum gap between two registry round-trips within
 // one CheckAndApplyAutoUpdates run - a hard requirement, not a tunable
 // optimization: the user's stack includes 15+ unauthenticated Docker Hub
@@ -306,6 +343,7 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 		IsUncontrolled: uncontrolled,
 	}
 	newImageByService := map[string]string{}
+	anyCheckSucceeded := false
 
 	for _, svc := range app.Services {
 		img, currentTag := docker.ExtractImageAndTag(svc.Image)
@@ -323,6 +361,7 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 		if !ok {
 			continue
 		}
+		anyCheckSucceeded = true
 
 		if newTag != currentTag {
 			// prefer surfacing a service that actually has an update in
@@ -341,6 +380,10 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 		} else if row.LatestKnownTag == "" {
 			row.LatestKnownTag = newTag
 		}
+	}
+
+	if !anyCheckSucceeded {
+		row = carryForwardKnownUpdate(row)
 	}
 
 	return row, newImageByService
@@ -472,7 +515,7 @@ func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg 
 
 	newTag, ok := checkNewestTag(ctx, app.Image, currentTag)
 	if !ok {
-		return row
+		return carryForwardKnownUpdate(row)
 	}
 	row.LatestKnownTag = newTag
 
