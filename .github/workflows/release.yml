@@ -62,8 +62,22 @@ jobs:
     # the connection mid-request and failed the whole build). Same "bypass
     # the flaky external mirror" call as the apt sources below, not a
     # meaningful security loss given go.sum is already the source of truth.
+    #
+    # GOTOOLCHAIN=local: this is a two-module repo where the root go.mod
+    # asks for go 1.25.0 but AppManagement/go.mod only needs go 1.21 -
+    # actions/setup-go's own internal sanity check (`go env GOPATH`) runs
+    # from the repo root, sees the root's go 1.25.0 directive even for the
+    # build-app-management job, and silently auto-downloads a whole second
+    # toolchain to satisfy it. That download used to succeed quietly via
+    # GOSUMDB; with GOSUMDB off, Go correctly refuses to skip verification
+    # for a full toolchain swap and hard-fails instead. Since each job's own
+    # setup-go step already installs the exact version it actually needs,
+    # there's no legitimate reason for this auto-switch to fire in CI at
+    # all - forcing "local" removes the extra network round-trip instead of
+    # just working around its failure mode.
     env:
       GOSUMDB: "off"
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -117,10 +131,12 @@ jobs:
       matrix:
         arch: [amd64, arm64]
     runs-on: ubuntu-latest
-    # see the matching comment in build-backend above - same sum.golang.org
-    # flakiness, same call to bypass it.
+    # see the matching comments in build-backend above - same sum.golang.org
+    # flakiness, and this is the job that actually hit the cross-module
+    # toolchain auto-download GOTOOLCHAIN=local heads off.
     env:
       GOSUMDB: "off"
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
