@@ -62,14 +62,21 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
       - name: Install libwebp-dev
-        # apt's default mirror list includes a region-local azure mirror
-        # that can hang indefinitely on a bad day (confirmed live: a build
-        # sat stuck for 24+ minutes retrying it) - short per-request
-        # timeouts + retries make a flaky mirror fail fast and move on
-        # instead of hanging the whole job.
+        # The runner's default sources include a region-local azure mirror
+        # that's been unreliable (confirmed live: hung 24+ min on one run,
+        # then hit the 15-min job timeout on a later run - it was retrying
+        # separately per-component index file, dozens of them, so
+        # per-request timeouts alone weren't enough). Bypass the runner's
+        # preconfigured sources entirely and update against only the
+        # canonical Ubuntu mirrors, which have been reliable throughout.
         run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends libwebp-dev
+          cat <<'SOURCES' | sudo tee /etc/apt/sources.list.d/reliable-only.list
+          deb http://archive.ubuntu.com/ubuntu noble main universe restricted multiverse
+          deb http://archive.ubuntu.com/ubuntu noble-updates main universe restricted multiverse
+          deb http://security.ubuntu.com/ubuntu noble-security main universe restricted multiverse
+          SOURCES
+          sudo apt-get -o Dir::Etc::sourcelist="sources.list.d/reliable-only.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" update
+          sudo apt-get install -y --no-install-recommends libwebp-dev
       - run: go generate ./...
       - env:
           CGO_ENABLED: "1"
