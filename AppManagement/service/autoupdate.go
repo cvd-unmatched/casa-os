@@ -44,7 +44,28 @@ type AutoUpdateAppStatus struct {
 var (
 	autoUpdateStatusMu    sync.Mutex
 	autoUpdateStatusCache []AutoUpdateAppStatus
+
+	notifiedTrackerOnce sync.Once
+	notifiedTracker     *autoupdate.NotifiedTracker
 )
+
+// sharedNotifiedTracker is loaded once (from disk, if present) and reused
+// by both the cron and manual "recheck" clicks, so neither path can
+// re-announce an update the other already notified about.
+func sharedNotifiedTracker() *autoupdate.NotifiedTracker {
+	notifiedTrackerOnce.Do(func() {
+		t, err := autoupdate.LoadNotifiedTracker()
+		if err != nil {
+			logger.Error("autoupdate: failed to load notified-state, starting empty", zap.Error(err))
+			t, _ = autoupdate.LoadNotifiedTracker() // retry once against a clean read; falls through to empty below on repeat failure
+		}
+		if t == nil {
+			t = &autoupdate.NotifiedTracker{}
+		}
+		notifiedTracker = t
+	})
+	return notifiedTracker
+}
 
 // GetAutoUpdateStatus reconciles the cached per-app status (populated by
 // the cron tick - see CheckAndApplyAutoUpdates) against the CURRENT live
@@ -156,7 +177,7 @@ const pacingDelay = 2500 * time.Millisecond
 // for a newer semver tag, and for policy=auto apps applies the update.
 // Called once per cron tick from main.go in place of the old,
 // catalog-only checkImageUpdates.
-func CheckAndApplyAutoUpdates(ctx context.Context, notified *sync.Map) {
+func CheckAndApplyAutoUpdates(ctx context.Context) {
 	cfg, err := autoupdate.Load()
 	if err != nil {
 		logger.Error("autoupdate: failed to load config", zap.Error(err))
@@ -172,14 +193,14 @@ func CheckAndApplyAutoUpdates(ctx context.Context, notified *sync.Map) {
 		logger.Error("autoupdate: failed to list compose apps", zap.Error(err))
 	}
 	for _, app := range composeApps {
-		updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyComposeApp(ctx, app, cfg, notified))
+		updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyComposeApp(ctx, app, cfg))
 		time.Sleep(pacingDelay)
 	}
 
 	casaOSApps, _ := MyService.Docker().GetContainerAppList(nil, nil, nil)
 	if casaOSApps != nil {
 		for _, app := range *casaOSApps {
-			updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyStandaloneApp(ctx, app, cfg, notified))
+			updateAutoUpdateStatusCacheEntry(checkAndMaybeApplyStandaloneApp(ctx, app, cfg))
 			time.Sleep(pacingDelay)
 		}
 	}
@@ -198,7 +219,7 @@ func RecheckApp(ctx context.Context, appName string) (AutoUpdateAppStatus, error
 	composeApps, err := MyService.Compose().List(ctx)
 	if err == nil {
 		if app, ok := composeApps[appName]; ok {
-			row := checkComposeApp(ctx, app, cfg)
+			row, _ := checkComposeAppForUpdates(ctx, app, cfg)
 			updateAutoUpdateStatusCacheEntry(row)
 			return row, nil
 		}
@@ -208,7 +229,7 @@ func RecheckApp(ctx context.Context, appName string) (AutoUpdateAppStatus, error
 	if casaOSApps != nil {
 		for _, app := range *casaOSApps {
 			if app.Name == appName {
-				row := checkStandaloneApp(ctx, app, cfg)
+				row := checkStandaloneAppForUpdates(ctx, app, cfg)
 				updateAutoUpdateStatusCacheEntry(row)
 				return row, nil
 			}
@@ -218,8 +239,8 @@ func RecheckApp(ctx context.Context, appName string) (AutoUpdateAppStatus, error
 	return AutoUpdateAppStatus{}, fmt.Errorf("app %q not found among managed apps", appName)
 }
 
-func checkAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *autoupdate.Config, notified *sync.Map) AutoUpdateAppStatus {
-	row, newImageByService := checkComposeAppForUpdates(ctx, app, cfg, notified)
+func checkAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *autoupdate.Config) AutoUpdateAppStatus {
+	row, newImageByService := checkComposeAppForUpdates(ctx, app, cfg)
 
 	if !row.IsUncontrolled && len(newImageByService) > 0 && row.AutoUpdate {
 		if err := app.UpdateImages(ctx, newImageByService); err != nil {
@@ -237,14 +258,7 @@ func checkAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *aut
 	return row
 }
 
-// checkComposeApp is the read-only half of checkAndMaybeApplyComposeApp,
-// used by RecheckApp (which must never apply an update, only report).
-func checkComposeApp(ctx context.Context, app *ComposeApp, cfg *autoupdate.Config) AutoUpdateAppStatus {
-	row, _ := checkComposeAppForUpdates(ctx, app, cfg, &sync.Map{})
-	return row
-}
-
-func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoupdate.Config, notified *sync.Map) (AutoUpdateAppStatus, map[string]string) {
+func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoupdate.Config) (AutoUpdateAppStatus, map[string]string) {
 	uncontrolled := isComposeAppUncontrolled(app)
 	settings := autoupdate.SettingsFor(cfg, app.Name)
 
@@ -284,7 +298,7 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 			row.UpdateAvailable = true
 			newImageByService[svc.Name] = img + ":" + newTag
 			if settings.Notify {
-				notifyImageUpdate(app.Name, row.DisplayName, svc.Name, newTag, notified)
+				notifyImageUpdate(app.Name, row.DisplayName, svc.Name, newTag)
 			}
 		} else if row.LatestKnownTag == "" {
 			row.LatestKnownTag = newTag
@@ -357,8 +371,8 @@ func isComposeAppUncontrolled(app *ComposeApp) bool {
 	return storeInfo.IsUncontrolled != nil && *storeInfo.IsUncontrolled
 }
 
-func checkAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, cfg *autoupdate.Config, notified *sync.Map) AutoUpdateAppStatus {
-	row := checkStandaloneAppForUpdates(ctx, app, cfg, notified)
+func checkAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, cfg *autoupdate.Config) AutoUpdateAppStatus {
+	row := checkStandaloneAppForUpdates(ctx, app, cfg)
 
 	if !row.UpdateAvailable || row.IsUncontrolled || !row.AutoUpdate {
 		return row
@@ -387,11 +401,7 @@ func checkAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, c
 	return row
 }
 
-func checkStandaloneApp(ctx context.Context, app model.MyAppList, cfg *autoupdate.Config) AutoUpdateAppStatus {
-	return checkStandaloneAppForUpdates(ctx, app, cfg, &sync.Map{})
-}
-
-func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg *autoupdate.Config, notified *sync.Map) AutoUpdateAppStatus {
+func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg *autoupdate.Config) AutoUpdateAppStatus {
 	_, currentTag := docker.ExtractImageAndTag(app.Image)
 	settings := autoupdate.SettingsFor(cfg, app.Name)
 
@@ -422,7 +432,7 @@ func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg 
 	if newTag != currentTag {
 		row.UpdateAvailable = true
 		if settings.Notify {
-			notifyImageUpdate(app.Name, row.DisplayName, app.Name, newTag, notified)
+			notifyImageUpdate(app.Name, row.DisplayName, app.Name, newTag)
 		}
 	}
 
@@ -486,12 +496,13 @@ func checkNewestTag(ctx context.Context, image, currentTag string) (string, bool
 	return autoupdate.NewestTag(tags, currentVersion.Prerelease() != "")
 }
 
-func notifyImageUpdate(appName, displayName, serviceName, newTag string, notified *sync.Map) {
+func notifyImageUpdate(appName, displayName, serviceName, newTag string) {
 	key := appName + ":" + serviceName + ":" + newTag
-	if _, already := notified.Load(key); already {
+	tracker := sharedNotifiedTracker()
+	if tracker.AlreadyNotified(key) {
 		return
 	}
-	notified.Store(key, true)
+	tracker.MarkNotified(key)
 	webhook.Send("image_update", "Update available",
 		fmt.Sprintf("A new image version (%s) is available for %s", newTag, displayName),
 		map[string]string{"app": appName, "service": serviceName, "tag": newTag})
