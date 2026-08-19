@@ -125,7 +125,7 @@ jobs:
           GOOS: linux
           GOARCH: ${{ matrix.arch }}
         run: |
-          go build -ldflags "-s -w" -o casaos-app-management main.go
+          go build -ldflags "-s -w -X main.commit=${{ github.sha }} -X main.forkVersion=${{ github.ref_name }}" -o casaos-app-management main.go
         working-directory: AppManagement
       - uses: actions/upload-artifact@v4
         with:

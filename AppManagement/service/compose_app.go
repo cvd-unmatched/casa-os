@@ -289,7 +289,15 @@ func (a *ComposeApp) UpdateImages(ctx context.Context, newImageByService map[str
 		return err
 	}
 
+	// unlike Update(), this is called from the auto-updater's own
+	// background context (not a request context), which never has
+	// PropertiesFromContext pre-populated by request middleware - so it
+	// comes back nil here and must be initialized before writing to it,
+	// confirmed live as the cause of a crash-loop panic.
 	eventProperties := common.PropertiesFromContext(ctx)
+	if eventProperties == nil {
+		eventProperties = map[string]string{}
+	}
 	eventProperties[common.PropertyTypeAppName.Name] = a.Name
 
 	if err := a.UpdateEventPropertiesFromStoreInfo(eventProperties); err != nil {

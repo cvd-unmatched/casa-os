@@ -17,6 +17,7 @@ import (
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/common"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/config"
+	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/webhook"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/route"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/service"
 	"github.com/IceWhaleTech/CasaOS-Common/model"
@@ -32,6 +33,13 @@ import (
 var (
 	commit = "private build"
 	date   = "private build"
+
+	// forkVersion is this fork's release tag (e.g. "v1.8.7"), injected via
+	// -ldflags at build time (see .github/workflows/release.yml's
+	// build-app-management job) - mirrors how the root casaos module
+	// stamps common.ForkVersion. Stamped onto outbound webhook.Version so
+	// notifications from this service show which build sent them.
+	forkVersion = "private build"
 
 	//go:embed api/index.html
 	_docHTML string
@@ -77,6 +85,8 @@ func main() {
 		service.MyService = service.NewService(config.CommonInfo.RuntimePath)
 
 		config.RemoveRuntimeIfNoNvidiaGPUFlag = *removeRuntimeIfNoNvidiaGPUFlag
+
+		webhook.Version = forkVersion
 	}
 
 	// setup cron

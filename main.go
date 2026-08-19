@@ -106,6 +106,9 @@ func main() {
 	if *versionFlag {
 		return
 	}
+
+	webhook.Version = common.ForkVersion
+
 	v1Router := route.InitV1Router()
 
 	v2Router := route.InitV2Router()

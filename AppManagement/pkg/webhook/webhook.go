@@ -25,6 +25,13 @@ import (
 
 var ConfigFilePath = filepath.Join(constants.DefaultConfigPath, "webhooks.json")
 
+// Version is the running fork release (e.g. "v1.8.7"), set once at startup
+// by main.go. Stamped onto every outbound notification so a message on
+// Discord/Slack/etc always shows which build sent it - otherwise
+// confirming "was this notification from before or after the fix shipped"
+// means SSHing in to check the version by hand.
+var Version string
+
 type Destination struct {
 	ID     string   `json:"id"`
 	Name   string   `json:"name"`
@@ -151,25 +158,34 @@ func SendTest(destType, destURL string) error {
 func payloadFor(destType, eventType, title, message string, fields map[string]string) ([]byte, error) {
 	switch destType {
 	case "discord":
+		embed := map[string]interface{}{
+			"title":       title,
+			"description": message,
+			"color":       colorFor(eventType),
+			"fields":      discordFields(fields),
+		}
+		if Version != "" {
+			embed["footer"] = map[string]interface{}{"text": "casaos " + Version}
+		}
 		return json.Marshal(map[string]interface{}{
-			"embeds": []map[string]interface{}{{
-				"title":       title,
-				"description": message,
-				"color":       colorFor(eventType),
-				"fields":      discordFields(fields),
-			}},
+			"embeds": []map[string]interface{}{embed},
 		})
 	case "slack":
+		text := "*" + title + "*\n" + message
+		if Version != "" {
+			text += "\n_casaos " + Version + "_"
+		}
 		return json.Marshal(map[string]interface{}{
-			"text": "*" + title + "*\n" + message,
+			"text": text,
 		})
 	default:
 		return json.Marshal(map[string]interface{}{
-			"event":     eventType,
-			"title":     title,
-			"message":   message,
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-			"data":      fields,
+			"event":       eventType,
+			"title":       title,
+			"message":     message,
+			"timestamp":   time.Now().UTC().Format(time.RFC3339),
+			"forkVersion": Version,
+			"data":        fields,
 		})
 	}
 }
