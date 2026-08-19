@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/webhook"
@@ -13,6 +14,42 @@ import (
 	dockerclient "github.com/docker/docker/client"
 	"go.uber.org/zap"
 )
+
+// crashNotifyCooldown bounds how often a single compose service can send a
+// container_crash notification - a container stuck in a restart loop dies
+// repeatedly in quick succession, and without this a user gets one message
+// per restart (confirmed live: reported as "container crashed a lot").
+// Crashes during the cooldown are still counted, just folded into the next
+// notification instead of each firing its own.
+const crashNotifyCooldown = 15 * time.Minute
+
+type crashWatcherState struct {
+	mu         sync.Mutex
+	lastSentAt map[string]time.Time
+	countSince map[string]int
+}
+
+var crashState = &crashWatcherState{
+	lastSentAt: map[string]time.Time{},
+	countSince: map[string]int{},
+}
+
+// recordAndShouldNotify records one crash for key and reports whether the
+// cooldown has elapsed since the last notification for it. count is the
+// number of crashes (including this one) since the last notification was
+// actually sent, reset to zero whenever notify is true.
+func (s *crashWatcherState) recordAndShouldNotify(key string) (count int, notify bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.countSince[key]++
+	if last, seen := s.lastSentAt[key]; seen && time.Since(last) < crashNotifyCooldown {
+		return s.countSince[key], false
+	}
+	count = s.countSince[key]
+	s.countSince[key] = 0
+	s.lastSentAt[key] = time.Now()
+	return count, true
+}
 
 // StartCrashWatcher watches the Docker event stream for containers that stop
 // unexpectedly (a non-zero exit code, as opposed to a graceful stop a user or
@@ -88,14 +125,25 @@ func handleDieEvent(msg events.Message) {
 	serviceName := msg.Actor.Attributes["com.docker.compose.service"]
 	containerName := msg.Actor.Attributes["name"]
 
+	count, notify := crashState.recordAndShouldNotify(project + "/" + serviceName)
+	if !notify {
+		return
+	}
+
+	message := fmt.Sprintf("%s (service %s in %s) exited with code %s", containerName, serviceName, project, exitCode)
+	if count > 1 {
+		message = fmt.Sprintf("%s - crashed %d times in the last %d minutes", message, count, int(crashNotifyCooldown.Minutes()))
+	}
+
 	webhook.Send(
 		"container_crash",
 		"Container crashed",
-		fmt.Sprintf("%s (service %s in %s) exited with code %s", containerName, serviceName, project, exitCode),
+		message,
 		map[string]string{
-			"app":       project,
-			"service":   serviceName,
-			"exit_code": exitCode,
+			"app":         project,
+			"service":     serviceName,
+			"exit_code":   exitCode,
+			"crash_count": fmt.Sprintf("%d", count),
 		},
 	)
 }
