@@ -102,22 +102,19 @@ export default {
 						/>
 						<b-checkbox
 							:value="app.notify" size="is-small" class="mr-3"
-							:disabled="app.isUncontrolled" @input="setSettings(app, { notify: $event })"
+							@input="setSettings(app, { notify: $event })"
 						>
 							{{ $t('Notify') }}
 						</b-checkbox>
 						<b-checkbox
 							:value="app.autoUpdate" size="is-small"
-							:disabled="app.isUncontrolled" @input="setSettings(app, { autoUpdate: $event })"
+							@input="setSettings(app, { autoUpdate: $event })"
 						>
 							{{ $t('Auto-update') }}
 						</b-checkbox>
 					</div>
 					<div class="is-size-7 has-text-grey mt-1">
-						<template v-if="app.isUncontrolled">
-							{{ $t('Uncontrolled - not eligible for auto-update.') }}
-						</template>
-						<template v-else-if="app.updateAvailable">
+						<template v-if="app.updateAvailable">
 							{{ app.currentTag }} &rarr; <span class="has-text-weight-semibold">{{ app.latestKnownTag }}</span> {{ $t('available') }}
 						</template>
 						<template v-else-if="app.latestKnownTag">

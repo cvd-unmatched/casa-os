@@ -187,7 +187,7 @@ func previousAutoUpdateStatus(appType, name string) (AutoUpdateAppStatus, bool) 
 // newImageByService (checkComposeAppForUpdates/checkStandaloneAppForUpdates
 // callers) only gets populated by a fresh, this-round confirmation.
 func carryForwardKnownUpdate(row AutoUpdateAppStatus) AutoUpdateAppStatus {
-	if row.UpdateAvailable || row.IsUncontrolled {
+	if row.UpdateAvailable {
 		return row
 	}
 	prev, ok := previousAutoUpdateStatus(row.AppType, row.Name)
@@ -305,7 +305,7 @@ func RecheckApp(ctx context.Context, appName string) (AutoUpdateAppStatus, error
 func checkAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *autoupdate.Config) AutoUpdateAppStatus {
 	row, newImageByService := checkComposeAppForUpdates(ctx, app, cfg)
 
-	if !row.IsUncontrolled && len(newImageByService) > 0 && row.AutoUpdate {
+	if len(newImageByService) > 0 && row.AutoUpdate {
 		firstAttempt := firstAutoUpdateAttempt(app.Name, row.LatestKnownTag)
 		if firstAttempt {
 			webhook.Send("image_update_applied", "Updating",
@@ -353,10 +353,11 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 			row.CurrentTag = currentTag
 		}
 
-		if uncontrolled {
-			continue
-		}
-
+		// IsUncontrolled (above) still reflects CasaOS's own App Store
+		// tag-alignment flag for display purposes, but this fork's
+		// semver-based auto-update deliberately manages these apps anyway -
+		// a different, tag-driven axis of "controlled" than the store's own
+		// catalog-alignment check.
 		newTag, ok := checkNewestTag(ctx, svc.Image, currentTag)
 		if !ok {
 			continue
@@ -455,7 +456,7 @@ func isComposeAppUncontrolled(app *ComposeApp) bool {
 func checkAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, cfg *autoupdate.Config) AutoUpdateAppStatus {
 	row := checkStandaloneAppForUpdates(ctx, app, cfg)
 
-	if !row.UpdateAvailable || row.IsUncontrolled || !row.AutoUpdate {
+	if !row.UpdateAvailable || !row.AutoUpdate {
 		return row
 	}
 
@@ -507,10 +508,6 @@ func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg 
 		AutoUpdate:     settings.AutoUpdate,
 		Notify:         settings.Notify,
 		IsUncontrolled: app.IsUncontrolled,
-	}
-
-	if app.IsUncontrolled {
-		return row
 	}
 
 	newTag, ok := checkNewestTag(ctx, app.Image, currentTag)
