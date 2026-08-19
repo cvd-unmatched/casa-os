@@ -141,7 +141,15 @@ func GetAuthURL(challenge string, img string) (*url.URL, error) {
 	q := authURL.Query()
 	q.Add("service", values["service"])
 
-	scopeImage := GetScopeFromImageName(img, values["service"])
+	// img still carries the registry host (e.g. "ghcr.io/org/repo") since,
+	// unlike BuildTagsURL/BuildManifestURL, nothing strips it before this
+	// point - GetScopeFromImageName's multi-segment branch only expects
+	// that for docker.io, so a host like ghcr.io/quay.io leaked straight
+	// into the scope, getting a token scoped to a nonexistent repository
+	// path and a 403 on every subsequent request. Confirmed live: every
+	// ghcr.io image failed tag/digest lookups because of this.
+	trimmedImg := strings.TrimPrefix(img, values["service"]+"/")
+	scopeImage := GetScopeFromImageName(trimmedImg, values["service"])
 
 	scope := fmt.Sprintf("repository:%s:pull", scopeImage)
 	q.Add("scope", scope)
