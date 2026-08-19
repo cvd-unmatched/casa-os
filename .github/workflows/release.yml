@@ -68,13 +68,26 @@ jobs:
         # separately per-component index file, dozens of them, so
         # per-request timeouts alone weren't enough). Bypass the runner's
         # preconfigured sources entirely and update against only the
-        # canonical Ubuntu mirrors, which have been reliable throughout.
+        # canonical Ubuntu mirrors instead.
+        #
+        # archive.ubuntu.com/security.ubuntu.com only host amd64/i386 -
+        # confirmed live this 404s on every index for arm64, which lives on
+        # the entirely separate ports.ubuntu.com mirror instead (which also
+        # folds security updates into the same host, unlike amd64's split).
         run: |
-          cat <<'SOURCES' | sudo tee /etc/apt/sources.list.d/reliable-only.list
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            cat <<'SOURCES' | sudo tee /etc/apt/sources.list.d/reliable-only.list
+          deb http://ports.ubuntu.com/ubuntu-ports noble main universe restricted multiverse
+          deb http://ports.ubuntu.com/ubuntu-ports noble-updates main universe restricted multiverse
+          deb http://ports.ubuntu.com/ubuntu-ports noble-security main universe restricted multiverse
+          SOURCES
+          else
+            cat <<'SOURCES' | sudo tee /etc/apt/sources.list.d/reliable-only.list
           deb http://archive.ubuntu.com/ubuntu noble main universe restricted multiverse
           deb http://archive.ubuntu.com/ubuntu noble-updates main universe restricted multiverse
           deb http://security.ubuntu.com/ubuntu noble-security main universe restricted multiverse
           SOURCES
+          fi
           sudo apt-get -o Dir::Etc::sourcelist="sources.list.d/reliable-only.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" update
           sudo apt-get install -y --no-install-recommends libwebp-dev
       - run: go generate ./...
