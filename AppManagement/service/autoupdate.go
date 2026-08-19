@@ -269,13 +269,22 @@ func checkAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *aut
 	row, newImageByService := checkComposeAppForUpdates(ctx, app, cfg)
 
 	if !row.IsUncontrolled && len(newImageByService) > 0 && row.AutoUpdate {
+		firstAttempt := firstAutoUpdateAttempt(app.Name, row.LatestKnownTag)
+		if firstAttempt {
+			webhook.Send("image_update_applied", "Updating",
+				fmt.Sprintf("Auto-updating %s to %s", row.DisplayName, row.LatestKnownTag),
+				map[string]string{"app": app.Name, "tag": row.LatestKnownTag})
+		}
+
 		if err := app.UpdateImages(ctx, newImageByService); err != nil {
 			logger.Error("autoupdate: failed to apply compose app update", zap.Error(err), zap.String("app", app.Name))
-			webhook.Send("image_update_failed", "Auto-update failed",
-				fmt.Sprintf("Failed to auto-update %s: %s", row.DisplayName, err.Error()),
-				map[string]string{"app": app.Name})
+			if firstAttempt {
+				webhook.Send("image_update_failed", "Update failed",
+					fmt.Sprintf("Failed to auto-update %s: %s", row.DisplayName, err.Error()),
+					map[string]string{"app": app.Name})
+			}
 		} else {
-			webhook.Send("image_update_applied", "Auto-update applied",
+			webhook.Send("image_update_applied", "Updated",
 				fmt.Sprintf("%s was auto-updated to %s", row.DisplayName, row.LatestKnownTag),
 				map[string]string{"app": app.Name, "tag": row.LatestKnownTag})
 		}
@@ -323,7 +332,10 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 			row.LatestKnownTag = newTag
 			row.UpdateAvailable = true
 			newImageByService[svc.Name] = img + ":" + newTag
-			if settings.Notify {
+			// an auto-update app is about to update itself on this same
+			// pass (see checkAndMaybeApplyComposeApp below) - "available"
+			// would just be a redundant ping seconds before "updated".
+			if settings.Notify && !settings.AutoUpdate {
 				notifyImageUpdate(app.Name, row.DisplayName, svc.Name, newTag)
 			}
 		} else if row.LatestKnownTag == "" {
@@ -404,22 +416,31 @@ func checkAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, c
 		return row
 	}
 
+	firstAttempt := firstAutoUpdateAttempt(app.Name, row.LatestKnownTag)
+	if firstAttempt {
+		webhook.Send("image_update_applied", "Updating",
+			fmt.Sprintf("Auto-updating %s to %s", app.Name, row.LatestKnownTag),
+			map[string]string{"app": app.Name, "tag": row.LatestKnownTag})
+	}
+
 	img, _ := docker.ExtractImageAndTag(app.Image)
 	if err := applyStandaloneAppUpdate(ctx, app.ID, img+":"+row.LatestKnownTag); err != nil {
 		logger.Error("autoupdate: failed to apply standalone app update", zap.Error(err), zap.String("app", app.Name))
-		webhook.Send("image_update_failed", "Auto-update failed",
-			fmt.Sprintf("Failed to auto-update %s: %s", app.Name, err.Error()),
-			map[string]string{"app": app.Name})
+		if firstAttempt {
+			webhook.Send("image_update_failed", "Update failed",
+				fmt.Sprintf("Failed to auto-update %s: %s", app.Name, err.Error()),
+				map[string]string{"app": app.Name})
+		}
 	} else {
 		// unlike the compose path, Install() only synchronously validates
 		// and writes the new compose file before returning - the actual
 		// pull+start happens in its own background goroutine (same
 		// fire-and-forget shape the manual "Rebuild" action already has
-		// today). This "applied" notification reflects that the promotion
+		// today). This "Updated" notification reflects that the promotion
 		// to a compose app was accepted, not a fully confirmed running
 		// container - a real failure past this point would still surface
 		// via CasaOS's own EventTypeAppInstallError message-bus event.
-		webhook.Send("image_update_applied", "Auto-update applied",
+		webhook.Send("image_update_applied", "Updated",
 			fmt.Sprintf("%s was auto-updated to %s", app.Name, row.LatestKnownTag),
 			map[string]string{"app": app.Name, "tag": row.LatestKnownTag})
 	}
@@ -457,7 +478,10 @@ func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg 
 
 	if newTag != currentTag {
 		row.UpdateAvailable = true
-		if settings.Notify {
+		// see the matching comment in checkComposeAppForUpdates - an
+		// auto-update app updates itself on this same pass, so "available"
+		// would just be a redundant ping seconds before "updated".
+		if settings.Notify && !settings.AutoUpdate {
 			notifyImageUpdate(app.Name, row.DisplayName, app.Name, newTag)
 		}
 	}
@@ -520,6 +544,23 @@ func checkNewestTag(ctx context.Context, image, currentTag string) (string, bool
 	}
 
 	return autoupdate.NewestTag(tags, currentVersion.Prerelease() != "")
+}
+
+// firstAutoUpdateAttempt reports whether this is the first time this cron
+// has tried to auto-update appName to tag, and marks it tried - so a pull
+// that fails every hour only pings "Updating"/"Update failed" once instead
+// of re-announcing the same stuck attempt on every retry. A later success
+// against the same tag still always announces "Updated" regardless (see
+// callers) - only the noisy "still trying" pings are deduped, not the
+// terminal outcome once it actually changes.
+func firstAutoUpdateAttempt(appName, tag string) bool {
+	tracker := sharedNotifiedTracker()
+	key := appName + ":auto-update-attempt:" + tag
+	if tracker.AlreadyNotified(key) {
+		return false
+	}
+	tracker.MarkNotified(key)
+	return true
 }
 
 func notifyImageUpdate(appName, displayName, serviceName, newTag string) {
