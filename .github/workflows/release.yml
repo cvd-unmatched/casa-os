@@ -42,6 +42,11 @@ jobs:
     # WebP via github.com/chai2010/webp, which needs CGO + libwebp - far
     # simpler to build natively on a matching runner than to cross-compile
     # CGO with a cross C toolchain + cross libwebp for arm64.
+    #
+    # Bounded well under GitHub's 6h default - confirmed live that a flaky
+    # apt mirror can otherwise hang a job indefinitely with no useful
+    # signal that anything's wrong.
+    timeout-minutes: 15
     strategy:
       matrix:
         include:
@@ -55,7 +60,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: sudo apt-get update && sudo apt-get install -y libwebp-dev
+          cache-dependency-path: go.sum
+      - name: Install libwebp-dev
+        # apt's default mirror list includes a region-local azure mirror
+        # that can hang indefinitely on a bad day (confirmed live: a build
+        # sat stuck for 24+ minutes retrying it) - short per-request
+        # timeouts + retries make a flaky mirror fail fast and move on
+        # instead of hanging the whole job.
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends libwebp-dev
       - run: go generate ./...
       - env:
           CGO_ENABLED: "1"
@@ -69,6 +83,7 @@ jobs:
           path: casa
 
   build-app-management:
+    timeout-minutes: 15
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -78,6 +93,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: AppManagement/go.mod
+          # without this, setup-go's cache auto-detection falls back to
+          # looking for go.sum at the repo root - the ROOT module's
+          # go.sum, not AppManagement's - so this job's own dependencies
+          # were never actually being cached correctly.
+          cache-dependency-path: AppManagement/go.sum
       - run: go generate ./...
         working-directory: AppManagement
       - env:
