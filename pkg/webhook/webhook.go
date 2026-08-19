@@ -81,6 +81,27 @@ func Save(cfg *Config) error {
 
 var httpClient = &http.Client{Timeout: 5 * time.Second}
 
+// imageUpdateEventGroup lets a destination subscribed to "image_update"
+// (the only auto-update checkbox the settings UI has ever exposed) also
+// receive "image_update_applied"/"image_update_failed" - two event types
+// the auto-updater has always sent but that no UI checkbox could ever
+// match, since they were only ever an exact-string match against
+// dest.Events. Confirmed live: a destination correctly receiving
+// container_crash notifications was receiving zero update notifications
+// of any kind, including "update available", despite the checkbox being on.
+var imageUpdateEventGroup = map[string]bool{
+	"image_update":         true,
+	"image_update_applied": true,
+	"image_update_failed":  true,
+}
+
+func destinationWantsEvent(dest Destination, eventType string) bool {
+	if containsString(dest.Events, eventType) {
+		return true
+	}
+	return imageUpdateEventGroup[eventType] && containsString(dest.Events, "image_update")
+}
+
 // Send delivers a notification to every configured destination subscribed to
 // eventType. Failures are logged, never returned - a broken webhook URL must
 // never take down whatever background job triggered this.
@@ -91,7 +112,7 @@ func Send(eventType, title, message string, fields map[string]string) {
 		return
 	}
 	for _, dest := range cfg.Destinations {
-		if !containsString(dest.Events, eventType) {
+		if !destinationWantsEvent(dest, eventType) {
 			continue
 		}
 		go sendOne(dest, eventType, title, message, fields)

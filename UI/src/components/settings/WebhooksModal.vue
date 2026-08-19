@@ -1,7 +1,12 @@
 <script>
 const EVENT_TYPES = [
 	{ key: 'container_crash', label: 'Container crashes' },
-	{ key: 'image_update', label: 'Docker image updates' },
+	// the auto-updater fires three related but distinct event types
+	// (detected, applied, failed) - a single checkbox controls all three
+	// so "Docker image updates" behaves as one on/off toggle instead of
+	// requiring three near-identical checkboxes, while still letting
+	// webhook.Send's exact eventType match actually deliver all three.
+	{ key: 'image_update', label: 'Docker image updates', relatedKeys: ['image_update', 'image_update_applied', 'image_update_failed'] },
 	{ key: 'disk_warning', label: 'Disk space warnings' },
 	{ key: 'package_update', label: 'Package delivery updates' },
 ]
@@ -79,9 +84,12 @@ export default {
 		},
 
 		toggleEvent(destination, eventKey) {
-			const index = destination.events.indexOf(eventKey)
-			if (index === -1) destination.events.push(eventKey)
-			else destination.events.splice(index, 1)
+			const eventType = EVENT_TYPES.find(e => e.key === eventKey)
+			const keys = (eventType && eventType.relatedKeys) || [eventKey]
+			if (destination.events.includes(eventKey))
+				destination.events = destination.events.filter(e => !keys.includes(e))
+			else
+				destination.events = Array.from(new Set([...destination.events, ...keys]))
 			this.save()
 		},
 
