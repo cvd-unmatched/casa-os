@@ -12,11 +12,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/IceWhaleTech/CasaOS-Common/utils/constants"
@@ -120,6 +123,79 @@ func Send(eventType, title, message string, fields map[string]string) {
 	}
 }
 
+// trackedTarget is one destination SendTrackable posted to, plus the
+// message ID it can later be edited by (empty if this destination/attempt
+// doesn't support editing).
+type trackedTarget struct {
+	dest      Destination
+	messageID string
+}
+
+// TrackedMessage is what SendTrackable returns and TryEdit consumes, to
+// update the same notification in place instead of posting a second one.
+type TrackedMessage struct {
+	targets []trackedTarget
+}
+
+// SendTrackable is like Send, but for Discord destinations it captures the
+// posted message's ID (via the webhook's ?wait=true response) so a later
+// TryEdit call can update that same message instead of posting a new one -
+// e.g. an auto-update's "Updating" ping becoming "Updated" in place rather
+// than two separate messages. Other destination types (Slack, generic) have
+// no equivalent via a bare incoming webhook URL, so TryEdit just posts
+// fresh for those, same as before this existed.
+//
+// Unlike Send, this blocks until every destination has responded (bounded
+// by httpClient's timeout) - every caller today is already deep in
+// background work (the auto-updater), never a request path, and the whole
+// point is knowing the message ID before returning.
+func SendTrackable(eventType, title, message string, fields map[string]string) *TrackedMessage {
+	cfg, err := Load()
+	if err != nil {
+		logger.Error("webhook: failed to load config", zap.Error(err))
+		return nil
+	}
+	tracked := &TrackedMessage{}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, dest := range cfg.Destinations {
+		if !destinationWantsEvent(dest, eventType) {
+			continue
+		}
+		wg.Add(1)
+		go func(dest Destination) {
+			defer wg.Done()
+			id := sendOneTrackable(dest, eventType, title, message, fields)
+			mu.Lock()
+			tracked.targets = append(tracked.targets, trackedTarget{dest: dest, messageID: id})
+			mu.Unlock()
+		}(dest)
+	}
+	wg.Wait()
+	return tracked
+}
+
+// TryEdit updates whatever SendTrackable posted: an in-place edit for
+// targets that returned a message ID, a fresh post otherwise - including
+// when tracked is nil (SendTrackable was never called, or failed to load
+// config), which just falls back to Send entirely. Deliberately doesn't
+// re-check destinationWantsEvent for eventType here - the point is
+// correcting the message a destination already received, not re-filtering
+// by whether it would've subscribed to this specific outcome.
+func TryEdit(tracked *TrackedMessage, eventType, title, message string, fields map[string]string) {
+	if tracked == nil || len(tracked.targets) == 0 {
+		Send(eventType, title, message, fields)
+		return
+	}
+	for _, t := range tracked.targets {
+		if t.messageID == "" {
+			go sendOne(t.dest, eventType, title, message, fields)
+			continue
+		}
+		go editOne(t.dest, t.messageID, eventType, title, message, fields)
+	}
+}
+
 func containsString(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
@@ -136,38 +212,107 @@ func containsString(list []string, s string) bool {
 // second, none retried, all silently dropped with only a log line.
 const maxRateLimitRetries = 3
 
+// postWithRetry POSTs body to url, retrying a 429 up to maxRateLimitRetries
+// times (honoring Retry-After). All failures are logged here so callers
+// don't need to - returns the response body and true only on a 2xx.
+func postWithRetry(url string, body []byte, destName string) ([]byte, bool) {
+	for attempt := 1; attempt <= maxRateLimitRetries; attempt++ {
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			logger.Error("webhook: failed to build request", zap.Error(err), zap.String("destination", destName))
+			return nil, false
+		}
+		req.Header.Set("Content-Type", "application/json")
+		res, err := httpClient.Do(req)
+		if err != nil {
+			logger.Error("webhook: request failed", zap.Error(err), zap.String("destination", destName))
+			return nil, false
+		}
+		status := res.StatusCode
+		delay := retryAfterDelay(res.Header)
+		respBody, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+
+		if status < 300 {
+			return respBody, true
+		}
+		if status == http.StatusTooManyRequests && attempt < maxRateLimitRetries {
+			time.Sleep(delay)
+			continue
+		}
+		logger.Error("webhook: destination returned an error status", zap.Int("status", status), zap.String("destination", destName))
+		return nil, false
+	}
+	return nil, false
+}
+
 func sendOne(dest Destination, eventType, title, message string, fields map[string]string) {
 	body, err := payloadFor(dest.Type, eventType, title, message, fields)
 	if err != nil {
 		logger.Error("webhook: failed to build payload", zap.Error(err), zap.String("destination", dest.Name))
 		return
 	}
+	postWithRetry(dest.URL, body, dest.Name)
+}
 
-	for attempt := 1; attempt <= maxRateLimitRetries; attempt++ {
-		req, err := http.NewRequest(http.MethodPost, dest.URL, bytes.NewReader(body))
-		if err != nil {
-			logger.Error("webhook: failed to build request", zap.Error(err), zap.String("destination", dest.Name))
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		res, err := httpClient.Do(req)
-		if err != nil {
-			logger.Error("webhook: request failed", zap.Error(err), zap.String("destination", dest.Name))
-			return
-		}
-		status := res.StatusCode
-		delay := retryAfterDelay(res.Header)
-		res.Body.Close()
+// sendOneTrackable is sendOne but, for Discord, requests the created
+// message back (?wait=true) and returns its ID for later editing. Other
+// destination types just send normally and report no trackable ID.
+func sendOneTrackable(dest Destination, eventType, title, message string, fields map[string]string) string {
+	body, err := payloadFor(dest.Type, eventType, title, message, fields)
+	if err != nil {
+		logger.Error("webhook: failed to build payload", zap.Error(err), zap.String("destination", dest.Name))
+		return ""
+	}
+	if dest.Type != "discord" {
+		postWithRetry(dest.URL, body, dest.Name)
+		return ""
+	}
 
-		if status < 300 {
-			return
-		}
-		if status == http.StatusTooManyRequests && attempt < maxRateLimitRetries {
-			time.Sleep(delay)
-			continue
-		}
-		logger.Error("webhook: destination returned an error status", zap.Int("status", status), zap.String("destination", dest.Name))
+	url := dest.URL
+	if strings.Contains(url, "?") {
+		url += "&wait=true"
+	} else {
+		url += "?wait=true"
+	}
+	respBody, ok := postWithRetry(url, body, dest.Name)
+	if !ok {
+		return ""
+	}
+	var parsed struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		logger.Error("webhook: failed to parse message id from response", zap.Error(err), zap.String("destination", dest.Name))
+		return ""
+	}
+	return parsed.ID
+}
+
+// editOne edits a message SendTrackable previously posted. Only meaningful
+// for Discord (the only type sendOneTrackable ever returns a message ID
+// for), via the same webhook URL's .../messages/{id} endpoint.
+func editOne(dest Destination, messageID, eventType, title, message string, fields map[string]string) {
+	body, err := payloadFor(dest.Type, eventType, title, message, fields)
+	if err != nil {
+		logger.Error("webhook: failed to build payload", zap.Error(err), zap.String("destination", dest.Name))
 		return
+	}
+	url := strings.TrimRight(dest.URL, "/") + "/messages/" + messageID
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(body))
+	if err != nil {
+		logger.Error("webhook: failed to build edit request", zap.Error(err), zap.String("destination", dest.Name))
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := httpClient.Do(req)
+	if err != nil {
+		logger.Error("webhook: edit request failed", zap.Error(err), zap.String("destination", dest.Name))
+		return
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		logger.Error("webhook: destination returned an error status editing message", zap.Int("status", res.StatusCode), zap.String("destination", dest.Name))
 	}
 }
 

@@ -307,8 +307,9 @@ func checkAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *aut
 
 	if len(newImageByService) > 0 && row.AutoUpdate {
 		firstAttempt := firstAutoUpdateAttempt(app.Name, row.LatestKnownTag)
+		var tracked *webhook.TrackedMessage
 		if firstAttempt {
-			webhook.Send("image_update_applied", "Updating",
+			tracked = webhook.SendTrackable("image_update_applied", "Updating",
 				fmt.Sprintf("Auto-updating %s to %s", row.DisplayName, row.LatestKnownTag),
 				map[string]string{"app": app.Name, "tag": row.LatestKnownTag})
 		}
@@ -316,12 +317,16 @@ func checkAndMaybeApplyComposeApp(ctx context.Context, app *ComposeApp, cfg *aut
 		if err := app.UpdateImages(ctx, newImageByService); err != nil {
 			logger.Error("autoupdate: failed to apply compose app update", zap.Error(err), zap.String("app", app.Name))
 			if firstAttempt {
-				webhook.Send("image_update_failed", "Update failed",
+				webhook.TryEdit(tracked, "image_update_failed", "Update failed",
 					fmt.Sprintf("Failed to auto-update %s: %s", row.DisplayName, err.Error()),
 					map[string]string{"app": app.Name})
 			}
 		} else {
-			webhook.Send("image_update_applied", "Updated",
+			// edits the "Updating" message in place when there is one
+			// (the common case) instead of posting a second message -
+			// falls back to a fresh post on a later retry that never sent
+			// its own "Updating" this round (see firstAutoUpdateAttempt).
+			webhook.TryEdit(tracked, "image_update_applied", "Updated",
 				fmt.Sprintf("%s was auto-updated to %s", row.DisplayName, row.LatestKnownTag),
 				map[string]string{"app": app.Name, "tag": row.LatestKnownTag})
 		}
@@ -461,8 +466,9 @@ func checkAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, c
 	}
 
 	firstAttempt := firstAutoUpdateAttempt(app.Name, row.LatestKnownTag)
+	var tracked *webhook.TrackedMessage
 	if firstAttempt {
-		webhook.Send("image_update_applied", "Updating",
+		tracked = webhook.SendTrackable("image_update_applied", "Updating",
 			fmt.Sprintf("Auto-updating %s to %s", app.Name, row.LatestKnownTag),
 			map[string]string{"app": app.Name, "tag": row.LatestKnownTag})
 	}
@@ -471,7 +477,7 @@ func checkAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, c
 	if err := applyStandaloneAppUpdate(ctx, app.ID, img+":"+row.LatestKnownTag); err != nil {
 		logger.Error("autoupdate: failed to apply standalone app update", zap.Error(err), zap.String("app", app.Name))
 		if firstAttempt {
-			webhook.Send("image_update_failed", "Update failed",
+			webhook.TryEdit(tracked, "image_update_failed", "Update failed",
 				fmt.Sprintf("Failed to auto-update %s: %s", app.Name, err.Error()),
 				map[string]string{"app": app.Name})
 		}
@@ -484,7 +490,10 @@ func checkAndMaybeApplyStandaloneApp(ctx context.Context, app model.MyAppList, c
 		// to a compose app was accepted, not a fully confirmed running
 		// container - a real failure past this point would still surface
 		// via CasaOS's own EventTypeAppInstallError message-bus event.
-		webhook.Send("image_update_applied", "Updated",
+		//
+		// Edits the "Updating" message in place when there is one (see the
+		// matching comment in checkAndMaybeApplyComposeApp).
+		webhook.TryEdit(tracked, "image_update_applied", "Updated",
 			fmt.Sprintf("%s was auto-updated to %s", app.Name, row.LatestKnownTag),
 			map[string]string{"app": app.Name, "tag": row.LatestKnownTag})
 	}
