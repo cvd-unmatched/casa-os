@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/common"
@@ -104,19 +103,19 @@ func main() {
 		// digest comparison, which silently never checked apps installed
 		// outside the app store), notifies via webhook, and applies the
 		// update for any app with auto-update enabled (see pkg/autoupdate).
-		// notifiedImageUpdates avoids re-notifying every hour for the same
-		// still-unapplied update.
-		notifiedImageUpdates := &sync.Map{}
+		// The "already notified" state persists to disk (pkg/autoupdate's
+		// NotifiedTracker) so a restart doesn't cause the same
+		// still-unapplied update to be re-announced.
 
 		// run once at startup, same as the appstore catalog job above -
 		// otherwise the status cache (what GET /v1/autoupdate/apps serves)
 		// sits empty for up to an hour after every restart, since
 		// cron.AddFunc's @every schedule only fires the NEXT occurrence,
 		// not immediately.
-		go service.CheckAndApplyAutoUpdates(ctx, notifiedImageUpdates)
+		go service.CheckAndApplyAutoUpdates(ctx)
 
 		if _, err := crontab.AddFunc("@every 1h", func() {
-			service.CheckAndApplyAutoUpdates(ctx, notifiedImageUpdates)
+			service.CheckAndApplyAutoUpdates(ctx)
 		}); err != nil {
 			panic(err)
 		}
