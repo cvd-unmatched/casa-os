@@ -785,7 +785,7 @@ export default {
      * @return {*} void
      */
     updateFromRepo() {
-      this.$api.sys.checkForkUpdate().then((res) => {
+      this.$api.sys.checkForkUpdate(true).then((res) => {
         const data = res.data.data
         const checked = !!data.latest_version
         this.forkUpdateInfo = {
