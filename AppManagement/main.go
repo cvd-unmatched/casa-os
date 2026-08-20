@@ -180,6 +180,7 @@ func main() {
 			"/v1/container",
 			"/v1/app-categories",
 			"/v1/autoupdate",
+			"/v1/backup",
 			route.V1DocPath,
 			route.V2APIPath,
 			route.V2DocPath,

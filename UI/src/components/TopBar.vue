@@ -59,7 +59,6 @@ export default {
         release_notes: '',
       },
       checkingForkUpdate: false,
-      autoUpdatePendingCount: 0,
       latestText: 'Currently at the latest version',
       updateText: 'A new version is available!',
       isConvertingIcons: false,
@@ -166,7 +165,6 @@ export default {
   mounted() {
     this.checkVersion()
     this.checkForkVersion()
-    this.checkAutoUpdates()
     this.loadGithubStatus()
     this.loadHiddenSettings()
     this.getUserInfo()
@@ -312,19 +310,6 @@ export default {
       })
     },
 
-    /**
-     * @description: Refresh the pending-update count for the Auto-Update
-     * header badge. Best-effort - a failure here shouldn't show an error,
-     * it just leaves the badge at its last known count.
-     * @return {*} void
-     */
-    checkAutoUpdates() {
-      this.$api.autoupdate.listApps().then((res) => {
-        const apps = res.data.data || []
-        this.autoUpdatePendingCount = apps.filter(app => app.updateAvailable).length
-      }).catch(() => {})
-    },
-
     showAutoUpdateModal() {
       this.$buefy.modal.open({
         parent: this,
@@ -334,11 +319,6 @@ export default {
         canCancel: ['escape', 'outside'],
         scroll: 'keep',
         animation: 'zoom-in',
-        events: {
-          close: () => {
-            this.checkAutoUpdates()
-          },
-        },
       })
     },
 
@@ -1403,7 +1383,6 @@ export default {
           type="is-dark"
         >
           <b-icon
-            :class="{ 'update-icon-dot': autoUpdatePendingCount > 0 }"
             class="picon" icon="update-outline" pack="casa" size="is-20"
           />
         </b-tooltip>
