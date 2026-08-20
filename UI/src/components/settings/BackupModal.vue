@@ -195,7 +195,7 @@ export default {
 							:disabled="!app.data_paths || app.data_paths.length === 0"
 							@input="(checked) => $set(exportExcluded, app.name, !checked)"
 						>
-							{{ app.name }}
+							{{ app.display_name || app.name }}
 						</b-checkbox>
 						<span class="is-size-7 has-text-grey">{{ humanSize(app.data_size_bytes) }}</span>
 					</div>
@@ -247,7 +247,7 @@ export default {
 								v-model="app.skip" size="is-small" class="is-flex-grow-1"
 								:disabled="app.name_conflict" :true-value="false" :false-value="true"
 							>
-								{{ app.name }}
+								{{ app.display_name || app.name }}
 							</b-checkbox>
 							<span v-if="app.name_conflict" class="tag is-warning is-size-7">
 								{{ $t('Already exists on this server - will be skipped') }}

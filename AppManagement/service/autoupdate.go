@@ -397,19 +397,27 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 
 // composeAppDisplayName picks the most meaningful name available for a
 // compose app, in order:
-//  1. A real stored title (WebAppGridItemAdapterV2's same StoreInfo().Title
+//  1. An explicit container_name set on the app's main service - this is
+//     the actual name docker ps shows, and the only field a user renaming
+//     a container (directly, or by editing the compose file through
+//     CasaOS) ever changes. The project name (app.Name) is fixed at
+//     install time and never follows a rename.
+//  2. A real stored title (WebAppGridItemAdapterV2's same StoreInfo().Title
 //     the dashboard uses) - but only if it's not just app.Name copied
 //     verbatim, which is what SetTitle falls back to at install time for
 //     any compose file with no explicit top-level `name:` (the common case
 //     for GitHub-imported apps - confirmed none of this user's apps set
 //     that field, so this stored "title" is normally just the same random
 //     Docker-style project name, not an improvement).
-//  2. The main service's image repository name (e.g. "inventory" from
+//  3. The main service's image repository name (e.g. "inventory" from
 //     ghcr.io/cvd-unmatched/inventory:1.6.0) - almost always more
 //     meaningful than a random project name, since it's literally the
 //     thing being run.
-//  3. The raw project name, as a last resort.
+//  4. The raw project name, as a last resort.
 func composeAppDisplayName(app *ComposeApp) string {
+	if name := composeAppContainerName(app); name != "" {
+		return name
+	}
 	if storeInfo, err := app.StoreInfo(false); err == nil && storeInfo != nil {
 		if title, ok := storeInfo.Title[common.DefaultLanguage]; ok && title != "" && title != app.Name {
 			return title
@@ -419,6 +427,23 @@ func composeAppDisplayName(app *ComposeApp) string {
 		return imageDisplayName(image)
 	}
 	return app.Name
+}
+
+// composeAppContainerName returns the explicit container_name set on the
+// "main_app" service (or, for single-service apps, the app's only
+// service) - compose-go never fills this field in with a default, so a
+// non-empty value only ever comes from something the user set themselves,
+// making it the one reliable signal that a container's been renamed.
+func composeAppContainerName(app *ComposeApp) string {
+	for _, svc := range app.Services {
+		if svc.Name == "main_app" && svc.ContainerName != "" {
+			return svc.ContainerName
+		}
+	}
+	if len(app.Services) == 1 && app.Services[0].ContainerName != "" {
+		return app.Services[0].ContainerName
+	}
+	return ""
 }
 
 // composeAppMainServiceImage returns the image of whichever service is
