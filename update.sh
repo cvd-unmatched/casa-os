@@ -8,21 +8,26 @@
 # APP_MANAGEMENT_BINARY_PATH below actually match your install (see FORK.md
 # for how to check). This script refuses to run if any of them don't already
 # exist, rather than guessing.
+#
+# Every setting below can be overridden per-invocation with an environment
+# variable instead of editing this file - handy when running the same script
+# unmodified across several machines with different layouts, e.g.:
+#   sudo BACKUP_ROOT=/srv/backups ./update.sh
 
 set -euo pipefail
 
-REPO="cvd-unmatched/casa-os"
-SERVICE="casaos"
-BINARY_PATH="/usr/bin/casaos"
-WWW_PATH="/var/lib/casaos/www"
-APP_MANAGEMENT_SERVICE="casaos-app-management"
-APP_MANAGEMENT_BINARY_PATH="/usr/bin/casaos-app-management"
-BACKUP_ROOT="/mnt/mydata/casaos-backups/update.sh"
+REPO="${REPO:-cvd-unmatched/casa-os}"
+SERVICE="${SERVICE:-casaos}"
+BINARY_PATH="${BINARY_PATH:-/usr/bin/casaos}"
+WWW_PATH="${WWW_PATH:-/var/lib/casaos/www}"
+APP_MANAGEMENT_SERVICE="${APP_MANAGEMENT_SERVICE:-casaos-app-management}"
+APP_MANAGEMENT_BINARY_PATH="${APP_MANAGEMENT_BINARY_PATH:-/usr/bin/casaos-app-management}"
+BACKUP_ROOT="${BACKUP_ROOT:-/mnt/mydata/casaos-backups/update.sh}"
 # Every run adds a new timestamped backup and never overwrites an old one -
 # without this, they'd accumulate forever. Kept ones are only pruned after
 # *this* run succeeds, so a run that itself fails never deletes a backup it
 # might still be needed to roll back to.
-KEEP_BACKUPS=5
+KEEP_BACKUPS="${KEEP_BACKUPS:-5}"
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run this as root (sudo ./update.sh) - it needs to replace $BINARY_PATH and restart $SERVICE." >&2
