@@ -67,7 +67,12 @@ export default {
       yamlObj['x-casaos'] = {}
       yamlObj['x-casaos'].title = {}
       yamlObj['x-casaos'].title.en_us = serviceName
-      yamlObj['x-casaos'].icon = `https://icon.casaos.io/main/all/${serviceName}.png`
+      // no icon guess here - icon.casaos.io only has entries for apps in
+      // IceWhaleTech's official store catalog, so guessing a URL from an
+      // arbitrary imported service name is wrong for nearly every custom
+      // app and permanently bakes a 404 into the compose file. Leaving
+      // icon unset lets every render site's existing b-image
+      // src-fallback show the local default icon instead.
       return stringify(yamlObj)
     },
 

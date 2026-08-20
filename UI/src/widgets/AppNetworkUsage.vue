@@ -19,7 +19,10 @@
 			</div>
 
 			<div v-for="app in topApps" :key="app.title" class="app-row mb-2 is-flex is-align-items-center">
-				<img v-if="app.icon" :src="app.icon" class="app-icon mr-2" alt="">
+				<b-image
+					v-if="app.icon" :src="app.icon"
+					:src-fallback="require('@/assets/img/app/default.svg')" class="app-icon mr-2"
+				/>
 				<b-icon v-else class="mr-2" icon="docker-outline" pack="casa" size="is-small" />
 				<span class="one-line is-flex-grow-1 is-size-7" :title="app.title">{{ app.title }}</span>
 				<span class="rate is-size-7 has-text-grey-100 ml-2">
