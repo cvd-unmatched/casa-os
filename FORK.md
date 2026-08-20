@@ -68,6 +68,15 @@ Then:
 sudo ./update.sh
 ```
 
+If any of those don't match this server's actual layout (or you just want
+backups written somewhere other than the default `/mnt/mydata/casaos-backups/update.sh`),
+override them with environment variables instead of editing the script -
+useful for running the same unmodified copy across several machines:
+
+```bash
+sudo BACKUP_ROOT=/srv/backups BINARY_PATH=/usr/local/bin/casaos ./update.sh
+```
+
 The original `.goreleaser.yaml` and the previous `release.yml` (which called
 `IceWhaleTech/github`'s private reusable workflow and needed OAuth secrets for
 Google Drive/Dropbox/OneDrive) are IceWhale's own release pipeline and are not
