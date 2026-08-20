@@ -1,20 +1,57 @@
 <script>
+import FolderPickerModal from './FolderPickerModal.vue'
+
 export default {
 	name: 'BackupModal',
 	data() {
 		return {
+			// export
+			exportApps: [],
+			exportAppsLoading: true,
+			exportExcluded: {}, // name -> true means "don't include this app's data"
+
+			// import
 			uploading: false,
 			uploadPercent: 0,
-			installing: false,
+			previewing: false,
+			preview: null, // { previewId, apps: [...] } once a preview comes back
+			confirming: false,
 			result: null,
 			error: '',
 		}
 	},
+	created() {
+		this.loadExportApps()
+	},
 	methods: {
+		loadExportApps() {
+			this.exportAppsLoading = true
+			this.$api.backup.listApps().then((res) => {
+				this.exportApps = res.data.data || []
+			}).catch(() => {
+				this.exportApps = []
+			}).finally(() => {
+				this.exportAppsLoading = false
+			})
+		},
+
+		humanSize(bytes) {
+			if (!bytes)
+				return '0 B'
+			const units = ['B', 'KB', 'MB', 'GB', 'TB']
+			let n = bytes
+			let i = 0
+			while (n >= 1024 && i < units.length - 1) {
+				n /= 1024
+				i++
+			}
+			return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+		},
+
 		confirmExport() {
 			this.$buefy.dialog.confirm({
-				title: this.$t('Export everything'),
-				message: this.$t('This downloads every installed app\'s compose config and data as one archive. It can be very large and take a while depending on how much app data you have. If CasaOS is behind a reverse proxy, a long idle transfer may be cut off by the proxy rather than by CasaOS itself.'),
+				title: this.$t('Export'),
+				message: this.$t('This downloads every checked app\'s compose config (and data, for apps left checked below) as one archive. It can be very large and take a while. If CasaOS is behind a reverse proxy, a long idle transfer may be cut off by the proxy rather than by CasaOS itself.'),
 				confirmText: this.$t('Export'),
 				cancelText: this.$t('Cancel'),
 				type: 'is-dark',
@@ -23,7 +60,8 @@ export default {
 		},
 
 		startExport() {
-			window.location.href = this.$api.backup.getExportUrl()
+			const excluded = this.exportApps.filter(app => this.exportExcluded[app.name]).map(app => app.name)
+			window.location.href = this.$api.backup.getExportUrl(excluded)
 		},
 
 		pickImportFile() {
@@ -38,36 +76,88 @@ export default {
 
 			this.$buefy.dialog.confirm({
 				title: this.$t('Import from backup'),
-				message: this.$t('This installs every app in the archive that doesn\'t already exist on this server by name - existing apps are left untouched, never overwritten. This can take several minutes once the upload finishes. Continue?'),
-				confirmText: this.$t('Import'),
+				message: this.$t('This uploads the archive and shows you what\'s inside - ports, volumes, and any name/port conflicts - before anything installs. Nothing happens on this server until you confirm on the next screen.'),
+				confirmText: this.$t('Upload'),
 				cancelText: this.$t('Cancel'),
 				type: 'is-dark',
-				onConfirm: () => this.startImport(file),
+				onConfirm: () => this.startImportPreview(file),
 			})
 		},
 
-		startImport(file) {
+		startImportPreview(file) {
 			this.result = null
 			this.error = ''
+			this.preview = null
 			this.uploading = true
 			this.uploadPercent = 0
-			this.installing = false
+			this.previewing = false
 
-			this.$api.backup.importBackup(file, (progressEvent) => {
+			this.$api.backup.importPreview(file, (progressEvent) => {
 				if (!progressEvent.total)
 					return
 				this.uploadPercent = Math.round((progressEvent.loaded / progressEvent.total) * 100)
 				if (this.uploadPercent >= 100) {
 					this.uploading = false
-					this.installing = true
+					this.previewing = true
 				}
 			}).then((res) => {
+				const data = res.data.data
+				this.preview = {
+					previewId: data.preview_id,
+					apps: (data.apps || []).map(app => ({ ...app, skip: app.name_conflict })),
+				}
+			}).catch((err) => {
+				this.error = err.response?.data?.message || this.$t('Could not read that archive.')
+			}).finally(() => {
+				this.uploading = false
+				this.previewing = false
+			})
+		},
+
+		openFolderPicker(volume) {
+			this.$buefy.modal.open({
+				parent: this,
+				component: FolderPickerModal,
+				props: { initialPath: volume.source },
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape', 'outside'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+				events: {
+					select: (path) => {
+						volume.source = path
+					},
+				},
+			})
+		},
+
+		confirmImport() {
+			const apps = this.preview.apps.map(app => ({
+				name: app.name,
+				skip: app.skip,
+				ports: app.services.flatMap(svc => svc.ports.map(p => ({
+					service_name: svc.service_name,
+					target: p.target,
+					protocol: p.protocol,
+					published: p.published,
+				}))),
+				volumes: app.services.flatMap(svc => svc.volumes.map(v => ({
+					service_name: svc.service_name,
+					target: v.target,
+					source: v.source,
+				}))),
+			}))
+
+			this.confirming = true
+			this.error = ''
+			this.$api.backup.importConfirm(this.preview.previewId, apps).then((res) => {
 				this.result = res.data.data
+				this.preview = null
 			}).catch((err) => {
 				this.error = err.response?.data?.message || this.$t('Import failed.')
 			}).finally(() => {
-				this.uploading = false
-				this.installing = false
+				this.confirming = false
 			})
 		},
 	},
@@ -87,47 +177,111 @@ export default {
 				{{ $t('Move every app and its data to a different server in one step.') }}
 			</p>
 
+			<!-- Export Start -->
 			<div class="action-card mb-4 p-3">
 				<p class="has-text-weight-semibold mb-2">
 					{{ $t('Export') }}
 				</p>
 				<p class="mb-3 has-text-grey is-size-7">
-					{{ $t('Downloads a single archive with every app\'s compose config and data.') }}
+					{{ $t('Every app\'s compose config is always included. Uncheck an app below to leave its data out - useful if you\'re transferring that data some other way.') }}
 				</p>
+
+				<b-loading v-model="exportAppsLoading" :is-full-page="false" />
+
+				<div v-if="!exportAppsLoading" class="export-app-list mb-3">
+					<div v-for="app in exportApps" :key="app.name" class="is-flex is-align-items-center py-1">
+						<b-checkbox
+							:value="!exportExcluded[app.name]" size="is-small" class="is-flex-grow-1"
+							:disabled="!app.data_paths || app.data_paths.length === 0"
+							@input="(checked) => $set(exportExcluded, app.name, !checked)"
+						>
+							{{ app.name }}
+						</b-checkbox>
+						<span class="is-size-7 has-text-grey">{{ humanSize(app.data_size_bytes) }}</span>
+					</div>
+				</div>
+
 				<b-button rounded size="is-small" type="is-dark" @click="confirmExport">
 					{{ $t('Export everything') }}
 				</b-button>
 			</div>
+			<!-- Export End -->
 
+			<!-- Import Start -->
 			<div class="action-card p-3">
 				<p class="has-text-weight-semibold mb-2">
 					{{ $t('Import') }}
 				</p>
-				<p class="mb-3 has-text-grey is-size-7">
-					{{ $t('Restores apps from an exported archive. Apps that already exist on this server (by name) are skipped, never overwritten.') }}
+				<p v-if="!preview" class="mb-3 has-text-grey is-size-7">
+					{{ $t('Upload an exported archive to review its apps - ports, volumes, and conflicts - before anything installs.') }}
 				</p>
 
-				<input ref="importFileInput" type="file" accept=".gz,.tar.gz" class="is-hidden" @change="onFileSelected">
-				<b-button
-					rounded size="is-small" type="is-dark"
-					:disabled="uploading || installing" @click="pickImportFile"
-				>
-					{{ $t('Choose backup file…') }}
-				</b-button>
+				<template v-if="!preview">
+					<input ref="importFileInput" type="file" accept=".gz,.tar.gz" class="is-hidden" @change="onFileSelected">
+					<b-button
+						rounded size="is-small" type="is-dark"
+						:disabled="uploading || previewing" @click="pickImportFile"
+					>
+						{{ $t('Choose backup file…') }}
+					</b-button>
 
-				<div v-if="uploading" class="mt-3">
-					<p class="is-size-7 mb-1">
-						{{ $t('Uploading…') }} {{ uploadPercent }}%
-					</p>
-					<progress class="progress is-small is-dark" :value="uploadPercent" max="100" />
-				</div>
+					<div v-if="uploading" class="mt-3">
+						<p class="is-size-7 mb-1">
+							{{ $t('Uploading…') }} {{ uploadPercent }}%
+						</p>
+						<progress class="progress is-small is-dark" :value="uploadPercent" max="100" />
+					</div>
+					<div v-if="previewing" class="mt-3">
+						<p class="is-size-7">
+							{{ $t('Reading the archive…') }}
+						</p>
+						<progress class="progress is-small is-dark" />
+					</div>
+				</template>
 
-				<div v-if="installing" class="mt-3">
-					<p class="is-size-7">
-						{{ $t('Installing on the server - this can take several minutes. Don\'t close this tab.') }}
-					</p>
-					<progress class="progress is-small is-dark" />
-				</div>
+				<!-- Review screen Start -->
+				<template v-else>
+					<div v-for="app in preview.apps" :key="app.name" class="import-app-card mb-3 p-2">
+						<div class="is-flex is-align-items-center mb-1">
+							<b-checkbox
+								v-model="app.skip" size="is-small" class="is-flex-grow-1"
+								:disabled="app.name_conflict" :true-value="false" :false-value="true"
+							>
+								{{ app.name }}
+							</b-checkbox>
+							<span v-if="app.name_conflict" class="tag is-warning is-size-7">
+								{{ $t('Already exists on this server - will be skipped') }}
+							</span>
+						</div>
+
+						<template v-if="!app.skip">
+							<div v-for="svc in app.services" :key="svc.service_name" class="ml-4">
+								<div v-for="port in svc.ports" :key="`${svc.service_name}-${port.target}-${port.protocol}`" class="is-flex is-align-items-center mb-1">
+									<span class="is-size-7 has-text-grey port-label">{{ port.target }}/{{ port.protocol }}</span>
+									<b-input
+										v-model="port.published" size="is-small" class="ml-2"
+										:placeholder="$t('Host port')"
+									/>
+									<span v-if="port.conflict" class="tag is-danger is-size-7 ml-2">
+										{{ $t('In use - pick a different port') }}
+									</span>
+								</div>
+								<div v-for="vol in svc.volumes" :key="`${svc.service_name}-${vol.target}`" class="is-flex is-align-items-center mb-1">
+									<span class="is-size-7 has-text-grey volume-label" :title="vol.target">{{ vol.target }}</span>
+									<b-input v-model="vol.source" size="is-small" class="ml-2 is-flex-grow-1" />
+									<b-button size="is-small" class="ml-2" @click="openFolderPicker(vol)">
+										{{ $t('Browse…') }}
+									</b-button>
+								</div>
+							</div>
+						</template>
+					</div>
+
+					<b-button rounded size="is-small" type="is-dark" :loading="confirming" @click="confirmImport">
+						{{ $t('Confirm Import') }}
+					</b-button>
+				</template>
+				<!-- Review screen End -->
 
 				<p v-if="error" class="mt-3 has-text-danger is-size-7">
 					{{ error }}
@@ -155,6 +309,7 @@ export default {
 					</template>
 				</div>
 			</div>
+			<!-- Import End -->
 		</section>
 	</div>
 </template>
@@ -168,6 +323,28 @@ export default {
 	.action-card {
 		border: 1px solid $border;
 		border-radius: 8px;
+	}
+
+	.export-app-list {
+		max-height: 12rem;
+		overflow-y: auto;
+	}
+
+	.import-app-card {
+		border: 1px solid $border;
+		border-radius: 8px;
+	}
+
+	.port-label {
+		min-width: 5rem;
+	}
+
+	.volume-label {
+		min-width: 8rem;
+		max-width: 8rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 }
 </style>
