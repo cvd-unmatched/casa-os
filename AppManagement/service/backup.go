@@ -115,22 +115,35 @@ func ExportBackup(ctx context.Context, w io.Writer) error {
 		return fmt.Errorf("writing manifest: %w", err)
 	}
 
+	// A single app's data - one unreadable file, a permission error, a
+	// socket or device file WalkDir chokes on - must not sacrifice every
+	// other app already queued behind it. Headers (200 OK) are already
+	// committed by the time any of this runs (see BackupExport), so an
+	// early return here doesn't fail the request - it silently truncates
+	// the download with no indication anything went wrong, discovered
+	// only later as an "unexpected EOF" trying to import that (genuinely
+	// incomplete) file. Confirmed live: a 2KB export from a 40+ app
+	// install. Import already tolerates a manifest entry whose compose
+	// file or data turned out missing from the archive (reported as a
+	// per-app Failed/skip, not an aborted import), so skipping here is
+	// safe on that side too.
 	for _, a := range apps {
 		if err := writeBytesEntry(tw, a.composeYAML, composeArchivePath(a.name)); err != nil {
-			return fmt.Errorf("writing compose file for %s: %w", a.name, err)
+			logger.Error("backup: failed to write compose file, skipping app", zap.Error(err), zap.String("app", a.name))
+			continue
 		}
 		for _, dataPath := range a.dataPaths {
 			if err := writeDirEntries(tw, dataPath, dataArchivePath(dataPath)); err != nil {
-				return fmt.Errorf("archiving data for %s: %w", a.name, err)
+				logger.Error("backup: failed to archive app data, app will import with no data", zap.Error(err), zap.String("app", a.name), zap.String("path", dataPath))
 			}
 		}
 	}
 
 	if err := writeConfigFileEntry(tw, webhook.ConfigFilePath, "config/webhooks.json"); err != nil {
-		return fmt.Errorf("writing webhooks config: %w", err)
+		logger.Error("backup: failed to write webhooks config", zap.Error(err))
 	}
 	if err := writeConfigFileEntry(tw, autoupdate.ConfigFilePath, "config/autoupdate.json"); err != nil {
-		return fmt.Errorf("writing autoupdate config: %w", err)
+		logger.Error("backup: failed to write autoupdate config", zap.Error(err))
 	}
 
 	if err := tw.Close(); err != nil {
@@ -290,20 +303,32 @@ func dirSize(root string) (int64, error) {
 // under archivePrefix, preserving ownership and never following symlinks
 // (avoids infinite loops on cyclic links and avoids silently duplicating
 // data a symlink points to outside the bind-mount root).
+//
+// A single unreadable file (permission denied, a socket/device file, a
+// race with something deleting it mid-walk) is logged and skipped rather
+// than aborting the whole directory - critically, a regular file is
+// os.Open'd BEFORE its tar.Header is written, not after. tar.Writer
+// enforces that each entry's declared Size is fully written before the
+// next WriteHeader call; committing a header and then failing to open the
+// file would desync every entry written after it for the rest of this
+// export, not just this one file.
 func writeDirEntries(tw *tar.Writer, root, archivePrefix string) error {
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			logger.Error("backup: failed to walk path, skipping", zap.Error(walkErr), zap.String("path", path))
+			return nil
 		}
 
 		info, err := d.Info()
 		if err != nil {
-			return err
+			logger.Error("backup: failed to stat path, skipping", zap.Error(err), zap.String("path", path))
+			return nil
 		}
 
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
-			return err
+			logger.Error("backup: failed to compute archive path, skipping", zap.Error(err), zap.String("path", path))
+			return nil
 		}
 		archiveName := archivePrefix
 		if rel != "." {
@@ -313,13 +338,25 @@ func writeDirEntries(tw *tar.Writer, root, archivePrefix string) error {
 		var link string
 		if info.Mode()&os.ModeSymlink != 0 {
 			if link, err = os.Readlink(path); err != nil {
-				return err
+				logger.Error("backup: failed to read symlink, skipping", zap.Error(err), zap.String("path", path))
+				return nil
 			}
+		}
+
+		// open before WriteHeader, per the func comment above
+		var f *os.File
+		if info.Mode().IsRegular() {
+			if f, err = os.Open(path); err != nil {
+				logger.Error("backup: failed to open file, skipping", zap.Error(err), zap.String("path", path))
+				return nil
+			}
+			defer f.Close()
 		}
 
 		header, err := tar.FileInfoHeader(info, link)
 		if err != nil {
-			return err
+			logger.Error("backup: failed to build tar header, skipping", zap.Error(err), zap.String("path", path))
+			return nil
 		}
 		header.Name = archiveName
 		setTarOwnership(header, info)
@@ -327,15 +364,13 @@ func writeDirEntries(tw *tar.Writer, root, archivePrefix string) error {
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
-
-		if !info.Mode().IsRegular() {
+		if f == nil {
 			return nil
 		}
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
+		// a failure here (a genuine mid-read I/O error - the file having
+		// opened successfully makes this far less likely than the open
+		// failing outright) does desync the rest of the stream; unlike
+		// every skip above, this one has to propagate.
 		_, err = io.Copy(tw, f)
 		return err
 	})
