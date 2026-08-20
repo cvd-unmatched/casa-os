@@ -87,6 +87,7 @@ func main() {
 		config.RemoveRuntimeIfNoNvidiaGPUFlag = *removeRuntimeIfNoNvidiaGPUFlag
 
 		webhook.Version = forkVersion
+		service.ForkVersion = forkVersion
 	}
 
 	// setup cron

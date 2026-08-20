@@ -145,6 +145,7 @@ func (c *CustomizationPostData) Services() types.Services {
 			CPUShares:   c.CPUShares,
 			Devices:     c.Devices.ToSlice(),
 			Environment: c.Envs.ToMappingWithEquals(),
+			Hostname:    c.HostName,
 			Image:       c.Image,
 			Name:        strings.ToLower(c.ContainerName),
 			NetworkMode: c.NetworkModel,

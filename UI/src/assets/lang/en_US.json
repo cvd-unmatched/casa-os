@@ -522,5 +522,21 @@
   "Installing {title}": "Installing {title}",
   "Legacy app (To be rebuilt).": "Legacy app (To be rebuilt).",
   "To be rebuilt.": "To be rebuilt.",
-  "launch-and-open": "Launch and open"
+  "launch-and-open": "Launch and open",
+  "Backup & Restore": "Backup & Restore",
+  "Move every app and its data to a different server in one step.": "Move every app and its data to a different server in one step.",
+  "Export": "Export",
+  "Export everything": "Export everything",
+  "Downloads a single archive with every app's compose config and data.": "Downloads a single archive with every app's compose config and data.",
+  "This downloads every installed app's compose config and data as one archive. It can be very large and take a while depending on how much app data you have. If CasaOS is behind a reverse proxy, a long idle transfer may be cut off by the proxy rather than by CasaOS itself.": "This downloads every installed app's compose config and data as one archive. It can be very large and take a while depending on how much app data you have. If CasaOS is behind a reverse proxy, a long idle transfer may be cut off by the proxy rather than by CasaOS itself.",
+  "Restores apps from an exported archive. Apps that already exist on this server (by name) are skipped, never overwritten.": "Restores apps from an exported archive. Apps that already exist on this server (by name) are skipped, never overwritten.",
+  "Import from backup": "Import from backup",
+  "This installs every app in the archive that doesn't already exist on this server by name - existing apps are left untouched, never overwritten. This can take several minutes once the upload finishes. Continue?": "This installs every app in the archive that doesn't already exist on this server by name - existing apps are left untouched, never overwritten. This can take several minutes once the upload finishes. Continue?",
+  "Choose backup file…": "Choose backup file…",
+  "Uploading…": "Uploading…",
+  "Installing on the server - this can take several minutes. Don't close this tab.": "Installing on the server - this can take several minutes. Don't close this tab.",
+  "Import failed.": "Import failed.",
+  "Imported": "Imported",
+  "Skipped": "Skipped",
+  "Failed": "Failed"
 }
