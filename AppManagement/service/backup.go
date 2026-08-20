@@ -74,6 +74,7 @@ type FailedApp struct {
 // containers and v2 compose apps end up in this same shape.
 type backupApp struct {
 	name        string
+	displayName string
 	sourceType  string
 	composeYAML []byte
 	dataPaths   []string
@@ -199,6 +200,7 @@ func collectBackupApps(ctx context.Context) ([]backupApp, error) {
 // archiving anything.
 type BackupAppSummary struct {
 	Name          string   `json:"name"`
+	DisplayName   string   `json:"display_name"`
 	SourceType    string   `json:"source_type"`
 	DataPaths     []string `json:"data_paths"`
 	DataSizeBytes int64    `json:"data_size_bytes"`
@@ -223,6 +225,7 @@ func ListBackupApps(ctx context.Context) ([]BackupAppSummary, error) {
 		}
 		summaries = append(summaries, BackupAppSummary{
 			Name:          a.name,
+			DisplayName:   a.displayName,
 			SourceType:    a.sourceType,
 			DataPaths:     a.dataPaths,
 			DataSizeBytes: size,
@@ -238,6 +241,7 @@ func composeAppToBackupApp(composeApp *ComposeApp) (backupApp, error) {
 	}
 	return backupApp{
 		name:        composeApp.Name,
+		displayName: composeAppDisplayName(composeApp),
 		sourceType:  "compose",
 		composeYAML: yamlBytes,
 		dataPaths:   bindMountSourcesOf(composeApp),
@@ -432,6 +436,7 @@ type ImportPreview struct {
 
 type ImportAppPreview struct {
 	Name         string                 `json:"name"`
+	DisplayName  string                 `json:"display_name"`
 	SourceType   string                 `json:"source_type"`
 	NameConflict bool                   `json:"name_conflict"` // an app with this name already exists on this server
 	HasData      bool                   `json:"has_data"`
@@ -494,6 +499,7 @@ func ImportBackupPreview(ctx context.Context, r io.Reader) (*ImportPreview, erro
 	for _, entry := range manifest.Apps {
 		appPreview := ImportAppPreview{
 			Name:         entry.Name,
+			DisplayName:  entry.Name,
 			SourceType:   entry.SourceType,
 			NameConflict: existingCompose[entry.Name] || existingStandalone[entry.Name],
 			HasData:      len(entry.DataPaths) > 0,
@@ -505,6 +511,7 @@ func ImportBackupPreview(ctx context.Context, r io.Reader) (*ImportPreview, erro
 			preview.Apps = append(preview.Apps, appPreview)
 			continue
 		}
+		appPreview.DisplayName = composeAppDisplayName(composeApp)
 
 		for _, svc := range composeApp.Services {
 			svcPreview := ImportServicePreview{ServiceName: svc.Name}
