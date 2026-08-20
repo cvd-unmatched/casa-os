@@ -9,6 +9,7 @@ export const SETTINGS_CATALOG = [
 	{ key: 'wallpaper', label: 'Wallpaper' },
 	{ key: 'icon_storage', label: 'Icon Storage Disk' },
 	{ key: 'webhooks', label: 'Webhooks' },
+	{ key: 'backup', label: 'Backup & Restore' },
 	{ key: 'convert_icons', label: 'Convert all icons to local WebP' },
 	{ key: 'github', label: 'GitHub' },
 	{ key: 'show_other_docker', label: 'Show other Docker container app(s)' },

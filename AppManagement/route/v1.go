@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/config"
 	v1 "github.com/IceWhaleTech/CasaOS-AppManagement/route/v1"
@@ -29,7 +30,14 @@ func InitV1Router() http.Handler {
 		AllowCredentials: true,
 	})))
 
-	e.Use(echo_middleware.Gzip())
+	e.Use(echo_middleware.GzipWithConfig(echo_middleware.GzipConfig{
+		// /backup/export streams an already-gzipped tar.gz - compressing it
+		// again here would waste CPU on data that doesn't compress twice and
+		// risks confusing clients that decode based on a single gzip layer.
+		Skipper: func(c echo.Context) bool {
+			return strings.HasPrefix(c.Path(), "/v1/backup/")
+		},
+	}))
 	e.Use(echo_middleware.Recover())
 	e.Use(echo_middleware.Logger())
 
@@ -91,6 +99,13 @@ func InitV1Router() http.Handler {
 			v1AutoUpdateGroup.GET("/apps", v1.ListAutoUpdateStatus)
 			v1AutoUpdateGroup.PUT("/apps/:name/settings", v1.SetAutoUpdateSettings)
 			v1AutoUpdateGroup.POST("/apps/:name/recheck", v1.RecheckApp)
+		}
+
+		v1BackupGroup := v1Group.Group("/backup")
+		v1BackupGroup.Use()
+		{
+			v1BackupGroup.GET("/export", v1.BackupExport)
+			v1BackupGroup.POST("/import", v1.BackupImport)
 		}
 	}
 

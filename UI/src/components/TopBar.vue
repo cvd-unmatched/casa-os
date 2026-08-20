@@ -5,6 +5,7 @@ import PortPanel from './settings/PortPanel.vue'
 import UpdateModal from './settings/UpdateModal.vue'
 import IconStorageModal from './settings/IconStorageModal.vue'
 import WebhooksModal from './settings/WebhooksModal.vue'
+import BackupModal from './settings/BackupModal.vue'
 import AutoUpdateModal from './settings/AutoUpdateModal.vue'
 import SettingsVisibilityModal, { hiddenSettingsConfig } from './settings/SettingsVisibilityModal.vue'
 import { mixin } from '@/mixins/mixin'
@@ -290,6 +291,19 @@ export default {
       this.$buefy.modal.open({
         parent: this,
         component: WebhooksModal,
+        hasModalCard: true,
+        trapFocus: true,
+        canCancel: ['escape', 'outside'],
+        scroll: 'keep',
+        animation: 'zoom-in',
+      })
+    },
+
+    showBackupModal() {
+      this.$refs.settingsDrop.toggle()
+      this.$buefy.modal.open({
+        parent: this,
+        component: BackupModal,
         hasModalCard: true,
         trapFocus: true,
         canCancel: ['escape', 'outside'],
@@ -1103,6 +1117,23 @@ export default {
             </div>
           </div>
           <!-- Webhooks End -->
+
+          <!-- Backup & Restore Start -->
+          <div
+            v-if="isSettingVisible('backup')"
+            class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
+          >
+            <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+              <b-icon class="mr-1 ml-2" icon="cloud-upload-outline" pack="casa" size="is-20" />
+              {{ $t("Backup & Restore") }}
+            </div>
+            <div class="ml-2">
+              <b-button rounded size="is-small" type="is-dark" @click="showBackupModal">
+                {{ $t("Open") }}
+              </b-button>
+            </div>
+          </div>
+          <!-- Backup & Restore End -->
 
           <!-- Convert Icons to WebP Start -->
           <div
