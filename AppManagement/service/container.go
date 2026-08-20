@@ -387,9 +387,10 @@ func (ds *dockerService) GetContainerAppList(name, image, state *string) (*[]mod
 			}
 			if m.Labels["origin"] == "system" {
 				name = strings.Split(m.Image, ":")[0]
-				if len(strings.Split(name, "/")) > 1 {
-					icon = "https://icon.casaos.io/main/all/" + strings.Split(name, "/")[1] + ".png"
-				}
+				// no icon guess here - icon.casaos.io only has entries for
+				// apps in IceWhaleTech's official store catalog, so this
+				// 404s for nearly every image name. Leaving icon empty
+				// lets the UI's own default-icon fallback handle it.
 			}
 
 			casaOSApp := model.MyAppList{
