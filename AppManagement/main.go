@@ -139,6 +139,17 @@ func main() {
 			panic(err)
 		}
 
+		// an import preview (POST /v1/backup/import/preview) stages an
+		// uploaded archive on disk and leaves it there for a later confirm
+		// call - if the user never confirms, nothing else ever cleans that
+		// up. An hour is generous for "review and confirm" while still
+		// keeping abandoned uploads from accumulating indefinitely.
+		if _, err := crontab.AddFunc("@every 20m", func() {
+			service.SweepStaleImportPreviews(time.Hour)
+		}); err != nil {
+			panic(err)
+		}
+
 		crontab.Start()
 		defer crontab.Stop()
 

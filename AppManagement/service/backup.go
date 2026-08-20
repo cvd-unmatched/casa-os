@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	v1 "github.com/IceWhaleTech/CasaOS-AppManagement/service/v1"
 	"github.com/IceWhaleTech/CasaOS-Common/utils/constants"
 	"github.com/IceWhaleTech/CasaOS-Common/utils/logger"
+	"github.com/IceWhaleTech/CasaOS-Common/utils/port"
 	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
 )
@@ -80,10 +82,18 @@ type backupApp struct {
 // ExportBackup streams every managed app's compose config, bind-mounted
 // data, and the shared webhook/autoupdate config as a single tar.gz written
 // directly to w - no buffering of the whole archive in memory or on disk.
-func ExportBackup(ctx context.Context, w io.Writer) error {
+// excludeData names apps whose compose config should still be included but
+// whose data directories should be skipped (the user transferring that
+// data some other way) - nil or empty includes every app's data as before.
+func ExportBackup(ctx context.Context, w io.Writer, excludeData map[string]bool) error {
 	apps, err := collectBackupApps(ctx)
 	if err != nil {
 		return err
+	}
+	for i := range apps {
+		if excludeData[apps[i].name] {
+			apps[i].dataPaths = nil
+		}
 	}
 
 	manifest := BackupManifest{
@@ -182,6 +192,43 @@ func collectBackupApps(ctx context.Context) ([]backupApp, error) {
 	}
 
 	return apps, nil
+}
+
+// BackupAppSummary is what GET /v1/backup/apps serves - lets the UI show a
+// per-app "include data" checklist before export actually starts, without
+// archiving anything.
+type BackupAppSummary struct {
+	Name          string   `json:"name"`
+	SourceType    string   `json:"source_type"`
+	DataPaths     []string `json:"data_paths"`
+	DataSizeBytes int64    `json:"data_size_bytes"`
+}
+
+func ListBackupApps(ctx context.Context) ([]BackupAppSummary, error) {
+	apps, err := collectBackupApps(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	summaries := make([]BackupAppSummary, 0, len(apps))
+	for _, a := range apps {
+		var size int64
+		for _, dataPath := range a.dataPaths {
+			s, err := dirSize(dataPath)
+			if err != nil {
+				logger.Error("backup: failed to size data path", zap.Error(err), zap.String("path", dataPath))
+				continue
+			}
+			size += s
+		}
+		summaries = append(summaries, BackupAppSummary{
+			Name:          a.name,
+			SourceType:    a.sourceType,
+			DataPaths:     a.dataPaths,
+			DataSizeBytes: size,
+		})
+	}
+	return summaries, nil
 }
 
 func composeAppToBackupApp(composeApp *ComposeApp) (backupApp, error) {
@@ -376,15 +423,196 @@ func writeDirEntries(tw *tar.Writer, root, archivePrefix string) error {
 	})
 }
 
-// ImportBackup extracts an archive ExportBackup produced into a fresh
-// staging directory first, then installs whatever doesn't collide with
-// what's already on this server. A failure at any point before every app
-// has been processed leaves already-running apps untouched - the staging
-// directory is always removed, success or failure.
-func ImportBackup(ctx context.Context, r io.Reader) (*ImportResult, error) {
-	sessionDir := filepath.Join(stagingRoot, uuid.NewV4().String())
+// ImportPreview is what ImportBackupPreview returns and what the caller
+// echoes back (with edits) to ImportBackupConfirm.
+type ImportPreview struct {
+	PreviewID string             `json:"preview_id"`
+	Apps      []ImportAppPreview `json:"apps"`
+}
+
+type ImportAppPreview struct {
+	Name         string                 `json:"name"`
+	SourceType   string                 `json:"source_type"`
+	NameConflict bool                   `json:"name_conflict"` // an app with this name already exists on this server
+	HasData      bool                   `json:"has_data"`
+	Services     []ImportServicePreview `json:"services"`
+}
+
+type ImportServicePreview struct {
+	ServiceName string                 `json:"service_name"`
+	Ports       []ImportPortPreview    `json:"ports"`
+	Volumes     []ImportVolumePreview  `json:"volumes"`
+}
+
+type ImportPortPreview struct {
+	Target    uint32 `json:"target"`    // container port
+	Published string `json:"published"` // host port, as originally exported
+	Protocol  string `json:"protocol"`
+	Conflict  bool   `json:"conflict"` // true if Published is already in use on this server
+}
+
+type ImportVolumePreview struct {
+	Target string `json:"target"` // container path
+	Source string `json:"source"` // host path, as originally exported
+}
+
+// ImportBackupPreview stages an uploaded archive under a fresh directory
+// and reports what it contains - per app, per service, every port and
+// bind-mounted volume, whether the app's name already collides with
+// something on this server, and whether any of its ports are already in
+// use - without installing anything or touching a single live path.
+//
+// Unlike the old one-shot import, the staging directory is deliberately
+// NOT cleaned up here - ImportBackupConfirm (keyed by the PreviewID this
+// returns) does that once it's actually applied, and SweepStaleImportPreviews
+// (wired into the cron in main.go) cleans up anything abandoned without
+// ever being confirmed.
+func ImportBackupPreview(ctx context.Context, r io.Reader) (*ImportPreview, error) {
+	previewID := uuid.NewV4().String()
+	sessionDir := filepath.Join(stagingRoot, previewID)
 	if err := os.MkdirAll(sessionDir, 0o700); err != nil {
 		return nil, fmt.Errorf("creating staging directory: %w", err)
+	}
+
+	manifest, err := extractArchive(r, sessionDir)
+	if err != nil {
+		if rmErr := os.RemoveAll(sessionDir); rmErr != nil {
+			logger.Error("backup: failed to clean up staging directory after a failed extract", zap.Error(rmErr), zap.String("path", sessionDir))
+		}
+		return nil, fmt.Errorf("extracting archive: %w", err)
+	}
+
+	existingCompose, existingStandalone := existingAppNames(ctx)
+
+	tcpInUse, udpInUse, err := port.ListPortsInUse()
+	if err != nil {
+		logger.Error("backup: failed to list ports in use, conflict detection will be incomplete", zap.Error(err))
+	}
+	tcpInUseSet, udpInUseSet := toPortSet(tcpInUse), toPortSet(udpInUse)
+
+	preview := &ImportPreview{PreviewID: previewID}
+	for _, entry := range manifest.Apps {
+		appPreview := ImportAppPreview{
+			Name:         entry.Name,
+			SourceType:   entry.SourceType,
+			NameConflict: existingCompose[entry.Name] || existingStandalone[entry.Name],
+			HasData:      len(entry.DataPaths) > 0,
+		}
+
+		composeApp, err := readStagedComposeApp(sessionDir, entry.ComposePath)
+		if err != nil {
+			logger.Error("backup: failed to read staged compose file for preview", zap.Error(err), zap.String("app", entry.Name))
+			preview.Apps = append(preview.Apps, appPreview)
+			continue
+		}
+
+		for _, svc := range composeApp.Services {
+			svcPreview := ImportServicePreview{ServiceName: svc.Name}
+			for _, p := range svc.Ports {
+				inUse := tcpInUseSet[p.Published]
+				if strings.EqualFold(p.Protocol, "udp") {
+					inUse = udpInUseSet[p.Published]
+				}
+				svcPreview.Ports = append(svcPreview.Ports, ImportPortPreview{
+					Target: p.Target, Published: p.Published, Protocol: p.Protocol, Conflict: inUse,
+				})
+			}
+			for _, vol := range svc.Volumes {
+				if vol.Type != "bind" {
+					continue
+				}
+				svcPreview.Volumes = append(svcPreview.Volumes, ImportVolumePreview{Target: vol.Target, Source: vol.Source})
+			}
+			appPreview.Services = append(appPreview.Services, svcPreview)
+		}
+
+		preview.Apps = append(preview.Apps, appPreview)
+	}
+
+	return preview, nil
+}
+
+// existingAppNames returns every app name already installed on this
+// server, split by kind, since a v1 standalone app and a v2 compose app
+// share one namespace for collision purposes.
+func existingAppNames(ctx context.Context) (compose map[string]bool, standalone map[string]bool) {
+	compose = map[string]bool{}
+	if composeApps, err := MyService.Compose().List(ctx); err != nil {
+		logger.Error("backup: failed to list existing compose apps", zap.Error(err))
+	} else {
+		for name := range composeApps {
+			compose[name] = true
+		}
+	}
+
+	standalone = map[string]bool{}
+	if casaOSApps, _ := MyService.Docker().GetContainerAppList(nil, nil, nil); casaOSApps != nil {
+		for _, app := range *casaOSApps {
+			standalone[app.Name] = true
+		}
+	}
+	return compose, standalone
+}
+
+func toPortSet(ports []int) map[string]bool {
+	set := make(map[string]bool, len(ports))
+	for _, p := range ports {
+		set[strconv.Itoa(p)] = true
+	}
+	return set
+}
+
+func readStagedComposeApp(sessionDir, composeArchiveRelPath string) (*ComposeApp, error) {
+	yamlBytes, err := os.ReadFile(filepath.Join(sessionDir, filepath.FromSlash(composeArchiveRelPath)))
+	if err != nil {
+		return nil, err
+	}
+	return NewComposeAppFromYAML(yamlBytes, false, true)
+}
+
+// AppImportDecision is one app's worth of review-screen edits, echoed back
+// from ImportBackupPreview's response to ImportBackupConfirm.
+type AppImportDecision struct {
+	Name    string           `json:"name"`
+	Skip    bool             `json:"skip"`
+	Ports   []PortOverride   `json:"ports"`
+	Volumes []VolumeOverride `json:"volumes"`
+}
+
+// PortOverride identifies one port by (service, container port, protocol)
+// and gives its new host port - an override with an empty Published is a
+// no-op, so only edited ports need to be sent at all.
+type PortOverride struct {
+	ServiceName string `json:"service_name"`
+	Target      uint32 `json:"target"`
+	Protocol    string `json:"protocol"`
+	Published   string `json:"published"`
+}
+
+// VolumeOverride identifies one bind-mounted volume by (service, container
+// path) and gives its new host destination - an override with an empty
+// Source is a no-op, so only redirected volumes need to be sent at all.
+type VolumeOverride struct {
+	ServiceName string `json:"service_name"`
+	Target      string `json:"target"`
+	Source      string `json:"source"`
+}
+
+// ImportBackupConfirm reopens the staging directory ImportBackupPreview
+// created (keyed by previewID) and actually applies it: for each app not
+// marked Skip, load its staged compose file, apply whatever port/volume
+// overrides the review screen collected (an app absent from decisions, or
+// a port/volume left unedited within one, keeps its original exported
+// value), move its data from where the archive staged it to wherever it's
+// actually supposed to land (the original path, unless overridden), then
+// install through the same pipeline InstallComposeApp uses. Each app is
+// independent - one failure doesn't block or roll back the rest. The
+// staging directory is removed once every app has been processed,
+// success or failure.
+func ImportBackupConfirm(ctx context.Context, previewID string, decisions []AppImportDecision) (*ImportResult, error) {
+	sessionDir := filepath.Join(stagingRoot, previewID)
+	if info, err := os.Stat(sessionDir); err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("preview %q not found - it may have already been confirmed, or expired", previewID)
 	}
 	defer func() {
 		if err := os.RemoveAll(sessionDir); err != nil {
@@ -392,14 +620,166 @@ func ImportBackup(ctx context.Context, r io.Reader) (*ImportResult, error) {
 		}
 	}()
 
-	manifest, err := extractArchive(r, sessionDir)
+	manifestBytes, err := os.ReadFile(filepath.Join(sessionDir, "manifest.json"))
 	if err != nil {
-		return nil, fmt.Errorf("extracting archive: %w", err)
+		return nil, fmt.Errorf("reading staged manifest: %w", err)
+	}
+	var manifest BackupManifest
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		return nil, fmt.Errorf("parsing staged manifest: %w", err)
 	}
 
 	restoreConfigFiles(sessionDir)
 
-	return applyStagedApps(ctx, sessionDir, manifest), nil
+	decisionByName := make(map[string]AppImportDecision, len(decisions))
+	for _, d := range decisions {
+		decisionByName[d.Name] = d
+	}
+
+	existingCompose, existingStandalone := existingAppNames(ctx)
+
+	result := &ImportResult{}
+	for _, entry := range manifest.Apps {
+		decision, hasDecision := decisionByName[entry.Name]
+		if hasDecision && decision.Skip {
+			result.Skipped = append(result.Skipped, SkippedApp{Name: entry.Name, Reason: "skipped by user"})
+			continue
+		}
+
+		if existingCompose[entry.Name] || existingStandalone[entry.Name] {
+			result.Skipped = append(result.Skipped, SkippedApp{Name: entry.Name, Reason: "an app with this name already exists on this server"})
+			continue
+		}
+
+		composeApp, err := readStagedComposeApp(sessionDir, entry.ComposePath)
+		if err != nil {
+			result.Failed = append(result.Failed, FailedApp{Name: entry.Name, Reason: "missing or invalid compose file in archive: " + err.Error()})
+			continue
+		}
+
+		// original archived source -> actual destination, defaulting to
+		// itself (unmoved) unless applyVolumeOverrides below redirects it -
+		// restoreDataPathsWithOverrides needs the ORIGINAL path to find
+		// what's staged on disk regardless of where it ends up.
+		destinations := map[string]string{}
+		for _, svc := range composeApp.Services {
+			for _, vol := range svc.Volumes {
+				if vol.Type == "bind" && vol.Source != "" {
+					destinations[vol.Source] = vol.Source
+				}
+			}
+		}
+
+		if hasDecision {
+			applyPortOverrides(composeApp, decision.Ports)
+			applyVolumeOverrides(composeApp, decision.Volumes, destinations)
+		}
+
+		validation, err := composeApp.GetPortsInUse()
+		if err != nil {
+			result.Failed = append(result.Failed, FailedApp{Name: entry.Name, Reason: "checking port conflicts: " + err.Error()})
+			continue
+		}
+		if validation != nil {
+			result.Skipped = append(result.Skipped, SkippedApp{Name: entry.Name, Reason: "one or more ports are still in use - go back and pick a different port"})
+			continue
+		}
+
+		if err := restoreDataPathsWithOverrides(sessionDir, entry.DataPaths, destinations); err != nil {
+			result.Failed = append(result.Failed, FailedApp{Name: entry.Name, Reason: "restoring app data: " + err.Error()})
+			continue
+		}
+
+		installCtx := common.WithProperties(context.Background(), map[string]string{})
+		if err := MyService.Compose().Install(installCtx, composeApp); err != nil {
+			result.Failed = append(result.Failed, FailedApp{Name: entry.Name, Reason: "install failed: " + err.Error()})
+			continue
+		}
+
+		result.Imported = append(result.Imported, entry.Name)
+	}
+
+	return result, nil
+}
+
+// applyPortOverrides rewrites Published (host) ports on composeApp to match
+// the review screen's edits, matched by (service, container target,
+// protocol) - an override with an empty Published is a no-op, leaving an
+// unedited, non-conflicting port at its original value.
+func applyPortOverrides(composeApp *ComposeApp, overrides []PortOverride) {
+	for _, o := range overrides {
+		if o.Published == "" {
+			continue
+		}
+		for i := range composeApp.Services {
+			if composeApp.Services[i].Name != o.ServiceName {
+				continue
+			}
+			for j := range composeApp.Services[i].Ports {
+				p := &composeApp.Services[i].Ports[j]
+				if p.Target == o.Target && strings.EqualFold(p.Protocol, o.Protocol) {
+					p.Published = o.Published
+				}
+			}
+		}
+	}
+}
+
+// applyVolumeOverrides rewrites a volume's Source (host path) to the
+// review screen's chosen destination, matched by (service, container
+// target). Records original -> new in destinations so
+// restoreDataPathsWithOverrides can still find the archived data (staged
+// under its ORIGINAL path) after this mutates composeApp's own copy of
+// Source to the new one.
+func applyVolumeOverrides(composeApp *ComposeApp, overrides []VolumeOverride, destinations map[string]string) {
+	for _, o := range overrides {
+		if o.Source == "" {
+			continue
+		}
+		for i := range composeApp.Services {
+			if composeApp.Services[i].Name != o.ServiceName {
+				continue
+			}
+			for j := range composeApp.Services[i].Volumes {
+				vol := &composeApp.Services[i].Volumes[j]
+				if vol.Type == "bind" && vol.Target == o.Target {
+					destinations[vol.Source] = o.Source
+					vol.Source = o.Source
+				}
+			}
+		}
+	}
+}
+
+// SweepStaleImportPreviews removes any staging directory under stagingRoot
+// older than maxAge - a preview that got uploaded (see
+// ImportBackupPreview) but never confirmed would otherwise sit there
+// forever. Wired into the cron in main.go.
+func SweepStaleImportPreviews(maxAge time.Duration) {
+	entries, err := os.ReadDir(stagingRoot)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.Error("backup: failed to list staging root for cleanup sweep", zap.Error(err))
+		}
+		return
+	}
+
+	cutoff := time.Now().Add(-maxAge)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		path := filepath.Join(stagingRoot, entry.Name())
+		if err := os.RemoveAll(path); err != nil {
+			logger.Error("backup: failed to remove stale import preview", zap.Error(err), zap.String("path", path))
+		} else {
+			logger.Info("backup: removed a stale (unconfirmed) import preview", zap.String("path", path))
+		}
+	}
 }
 
 // restoreConfigFiles copies the shared webhook/autoupdate config staged
@@ -440,7 +820,11 @@ func restoreConfigFiles(sessionDir string) {
 // here is required to be it - its TotalDataBytes is checked against free
 // space on dir's filesystem before any further entry is staged, so an
 // import too large for this disk fails fast instead of filling it mid-
-// transfer.
+// transfer. The manifest is also written to dir/manifest.json (not just
+// parsed and held in memory) - ImportBackupConfirm runs in a separate
+// request from whatever called this, potentially long after, and needs
+// to re-read it from the staged directory rather than from a variable
+// that only existed for the lifetime of the preview call.
 func extractArchive(r io.Reader, dir string) (*BackupManifest, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
@@ -474,6 +858,9 @@ func extractArchive(r io.Reader, dir string) (*BackupManifest, error) {
 			}
 			if err := checkFreeSpace(dir, manifest.TotalDataBytes); err != nil {
 				return nil, err
+			}
+			if err := os.WriteFile(filepath.Join(dir, "manifest.json"), data, 0o600); err != nil {
+				return nil, fmt.Errorf("staging manifest: %w", err)
 			}
 			continue
 		}
@@ -539,89 +926,31 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-// applyStagedApps is phase B of import: for every app in the manifest, skip
-// on a name collision (checked against both compose and standalone apps -
-// they share one namespace) or a port conflict, otherwise move its staged
-// data onto its final live path and install it. Each app is independent -
-// one failure doesn't block or roll back the rest.
-func applyStagedApps(ctx context.Context, sessionDir string, manifest *BackupManifest) *ImportResult {
-	result := &ImportResult{}
-
-	existingCompose, err := MyService.Compose().List(ctx)
-	if err != nil {
-		logger.Error("backup: failed to list existing compose apps for collision check", zap.Error(err))
-		existingCompose = map[string]*ComposeApp{}
-	}
-	existingStandalone := map[string]bool{}
-	if casaOSApps, _ := MyService.Docker().GetContainerAppList(nil, nil, nil); casaOSApps != nil {
-		for _, app := range *casaOSApps {
-			existingStandalone[app.Name] = true
-		}
-	}
-
-	for _, entry := range manifest.Apps {
-		if _, exists := existingCompose[entry.Name]; exists || existingStandalone[entry.Name] {
-			result.Skipped = append(result.Skipped, SkippedApp{Name: entry.Name, Reason: "an app with this name already exists on this server"})
-			continue
-		}
-
-		composePath := filepath.Join(sessionDir, filepath.FromSlash(entry.ComposePath))
-		yamlBytes, err := os.ReadFile(composePath)
-		if err != nil {
-			result.Failed = append(result.Failed, FailedApp{Name: entry.Name, Reason: "missing compose file in archive: " + err.Error()})
-			continue
-		}
-
-		composeApp, err := NewComposeAppFromYAML(yamlBytes, false, true)
-		if err != nil {
-			result.Failed = append(result.Failed, FailedApp{Name: entry.Name, Reason: "invalid compose file: " + err.Error()})
-			continue
-		}
-
-		validation, err := composeApp.GetPortsInUse()
-		if err != nil {
-			result.Failed = append(result.Failed, FailedApp{Name: entry.Name, Reason: "checking port conflicts: " + err.Error()})
-			continue
-		}
-		if validation != nil {
-			result.Skipped = append(result.Skipped, SkippedApp{Name: entry.Name, Reason: "one or more ports are already in use"})
-			continue
-		}
-
-		if err := restoreDataPaths(sessionDir, entry.DataPaths); err != nil {
-			result.Failed = append(result.Failed, FailedApp{Name: entry.Name, Reason: "restoring app data: " + err.Error()})
-			continue
-		}
-
-		installCtx := common.WithProperties(context.Background(), map[string]string{})
-		if err := MyService.Compose().Install(installCtx, composeApp); err != nil {
-			result.Failed = append(result.Failed, FailedApp{Name: entry.Name, Reason: "install failed: " + err.Error()})
-			continue
-		}
-
-		result.Imported = append(result.Imported, entry.Name)
-	}
-
-	return result
-}
-
-// restoreDataPaths moves each staged data directory to its final absolute
-// host path - must happen before Install, since that's what makes the
-// bind-mount sources exist when docker-compose up runs. os.Rename is a
-// cheap same-filesystem metadata move (not a copy), since staging and the
-// live data root are on the same host filesystem.
-func restoreDataPaths(sessionDir string, dataPaths []string) error {
-	for _, absPath := range dataPaths {
-		staged := filepath.Join(sessionDir, filepath.FromSlash(dataArchivePath(absPath)))
+// restoreDataPathsWithOverrides moves each staged data directory to its
+// destination - the original absolute path it was archived under by
+// default, or wherever the review screen redirected that specific volume
+// to (destinations, keyed by the ORIGINAL path, from ImportBackupConfirm).
+// Must happen before Install, since that's what makes the bind-mount
+// sources exist when docker-compose up runs. os.Rename is a cheap
+// same-filesystem metadata move (not a copy), since staging and the live
+// data root are on the same host filesystem.
+func restoreDataPathsWithOverrides(sessionDir string, originalDataPaths []string, destinations map[string]string) error {
+	for _, originalPath := range originalDataPaths {
+		staged := filepath.Join(sessionDir, filepath.FromSlash(dataArchivePath(originalPath)))
 		if _, err := os.Stat(staged); os.IsNotExist(err) {
 			// listed in the manifest but nothing was actually archived
-			// under it (e.g. an empty directory) - nothing to move
+			// under it (e.g. an empty directory, or this app's data was
+			// excluded at export time) - nothing to move
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+		destination := originalPath
+		if d, ok := destinations[originalPath]; ok && d != "" {
+			destination = d
+		}
+		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 			return err
 		}
-		if err := os.Rename(staged, absPath); err != nil {
+		if err := os.Rename(staged, destination); err != nil {
 			return err
 		}
 	}

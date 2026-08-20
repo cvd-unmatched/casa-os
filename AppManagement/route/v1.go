@@ -104,8 +104,10 @@ func InitV1Router() http.Handler {
 		v1BackupGroup := v1Group.Group("/backup")
 		v1BackupGroup.Use()
 		{
+			v1BackupGroup.GET("/apps", v1.BackupApps)
 			v1BackupGroup.GET("/export", v1.BackupExport)
-			v1BackupGroup.POST("/import", v1.BackupImport)
+			v1BackupGroup.POST("/import/preview", v1.BackupImportPreview)
+			v1BackupGroup.POST("/import/confirm", v1.BackupImportConfirm)
 		}
 	}
 

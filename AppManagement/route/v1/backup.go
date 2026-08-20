@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/service"
@@ -12,21 +13,45 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// @Summary list every exportable app - name, data paths, and data size - without archiving anything
+// @Produce  application/json
+// @Tags backup
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /backup/apps [get]
+func BackupApps(ctx echo.Context) error {
+	apps, err := service.ListBackupApps(ctx.Request().Context())
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, modelCommon.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
+	return ctx.JSON(http.StatusOK, modelCommon.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: apps})
+}
+
 // @Summary stream a tar.gz of every managed app's compose config, bind-mounted data, and shared config
 // @Produce  application/gzip
 // @Tags backup
+// @Param exclude_data query string false "comma-separated app names whose data should be skipped (compose config is still included)"
 // @Security ApiKeyAuth
 // @Success 200 {file} file "tar.gz archive"
 // @Router /backup/export [get]
 func BackupExport(ctx echo.Context) error {
 	filename := fmt.Sprintf("casaos-backup-%s.tar.gz", time.Now().UTC().Format("20060102-150405"))
 
+	excludeData := map[string]bool{}
+	if raw := ctx.QueryParam("exclude_data"); raw != "" {
+		for _, name := range strings.Split(raw, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				excludeData[name] = true
+			}
+		}
+	}
+
 	res := ctx.Response()
 	res.Header().Set(echo.HeaderContentType, "application/gzip")
 	res.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	res.WriteHeader(http.StatusOK)
 
-	if err := service.ExportBackup(ctx.Request().Context(), res); err != nil {
+	if err := service.ExportBackup(ctx.Request().Context(), res, excludeData); err != nil {
 		// headers (and likely some body) are already flushed by the time a
 		// streaming export can fail - nothing left to do but log server-side,
 		// there's no clean way to report an error mid-download.
@@ -35,15 +60,44 @@ func BackupExport(ctx echo.Context) error {
 	return nil
 }
 
-// @Summary restore apps from a tar.gz produced by /backup/export
+// @Summary stage an uploaded tar.gz and report what it contains - name/port conflicts, volumes, ports - without installing anything
 // @Accept application/octet-stream
 // @Produce  application/json
 // @Tags backup
 // @Security ApiKeyAuth
 // @Success 200 {string} string "ok"
-// @Router /backup/import [post]
-func BackupImport(ctx echo.Context) error {
-	result, err := service.ImportBackup(context.Background(), ctx.Request().Body)
+// @Router /backup/import/preview [post]
+func BackupImportPreview(ctx echo.Context) error {
+	preview, err := service.ImportBackupPreview(context.Background(), ctx.Request().Body)
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, modelCommon.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
+
+	return ctx.JSON(http.StatusOK, modelCommon.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: preview})
+}
+
+type backupImportConfirmRequest struct {
+	PreviewID string                       `json:"preview_id"`
+	Apps      []service.AppImportDecision  `json:"apps"`
+}
+
+// @Summary apply a previously previewed import, with any port/volume edits from the review screen
+// @Accept application/json
+// @Produce  application/json
+// @Tags backup
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /backup/import/confirm [post]
+func BackupImportConfirm(ctx echo.Context) error {
+	req := backupImportConfirmRequest{}
+	if err := (&echo.DefaultBinder{}).BindBody(ctx, &req); err != nil {
+		return ctx.JSON(http.StatusBadRequest, modelCommon.Result{Success: common_err.INVALID_PARAMS, Message: err.Error()})
+	}
+	if req.PreviewID == "" {
+		return ctx.JSON(http.StatusBadRequest, modelCommon.Result{Success: common_err.INVALID_PARAMS, Message: "preview_id is required"})
+	}
+
+	result, err := service.ImportBackupConfirm(context.Background(), req.PreviewID, req.Apps)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, modelCommon.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
 	}
