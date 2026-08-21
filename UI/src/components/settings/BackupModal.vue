@@ -27,7 +27,9 @@ export default {
 		loadExportApps() {
 			this.exportAppsLoading = true
 			this.$api.backup.listApps().then((res) => {
-				this.exportApps = res.data.data || []
+				const apps = res.data.data || []
+				apps.sort((a, b) => (b.data_size_bytes || 0) - (a.data_size_bytes || 0))
+				this.exportApps = apps
 			}).catch(() => {
 				this.exportApps = []
 			}).finally(() => {
