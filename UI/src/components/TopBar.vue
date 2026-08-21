@@ -1688,6 +1688,25 @@ export default {
 			overflow-y: auto;
 		}
 	}
+
+	// The settings trigger sits near the left edge of the top bar, not at
+	// x=0, so a width relative to the trigger's own position (the rule
+	// above) still runs the panel's right edge off the screen - it needs to
+	// be positioned relative to the viewport itself, not the trigger, to
+	// actually stay on screen.
+	.settings-dropdown .dropdown-menu {
+		position: fixed !important;
+		top: 3.5rem;
+		left: 0.75rem;
+		right: 0.75rem;
+		width: auto;
+		max-width: none;
+		margin-top: 0;
+
+		.dropdown-content {
+			max-height: calc(100vh - 4.25rem) !important;
+		}
+	}
 }
 
 // TODO
