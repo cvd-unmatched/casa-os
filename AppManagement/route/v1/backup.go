@@ -31,6 +31,7 @@ func BackupApps(ctx echo.Context) error {
 // @Produce  application/gzip
 // @Tags backup
 // @Param exclude_data query string false "comma-separated app names whose data should be skipped (compose config is still included)"
+// @Param user_custom query string false "opaque JSON blob (folder groupings, dashboard order) the frontend fetched from elsewhere - embedded as-is, never interpreted here"
 // @Security ApiKeyAuth
 // @Success 200 {file} file "tar.gz archive"
 // @Router /backup/export [get]
@@ -46,12 +47,21 @@ func BackupExport(ctx echo.Context) error {
 		}
 	}
 
+	var userCustom []byte
+	if raw := ctx.QueryParam("user_custom"); raw != "" {
+		if json.Valid([]byte(raw)) {
+			userCustom = []byte(raw)
+		} else {
+			ctx.Logger().Error("backup: ignoring invalid user_custom query param")
+		}
+	}
+
 	res := ctx.Response()
 	res.Header().Set(echo.HeaderContentType, "application/gzip")
 	res.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	res.WriteHeader(http.StatusOK)
 
-	if err := service.ExportBackup(ctx.Request().Context(), res, excludeData); err != nil {
+	if err := service.ExportBackup(ctx.Request().Context(), res, excludeData, userCustom); err != nil {
 		// headers (and likely some body) are already flushed by the time a
 		// streaming export can fail - nothing left to do but log server-side,
 		// there's no clean way to report an error mid-download.

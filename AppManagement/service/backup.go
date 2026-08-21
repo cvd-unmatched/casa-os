@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +22,7 @@ import (
 	"github.com/IceWhaleTech/CasaOS-Common/utils/constants"
 	"github.com/IceWhaleTech/CasaOS-Common/utils/logger"
 	"github.com/IceWhaleTech/CasaOS-Common/utils/port"
+	jsoniter "github.com/json-iterator/go"
 	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
 )
@@ -45,6 +48,14 @@ type BackupManifest struct {
 	ForkVersion    string           `json:"fork_version"`
 	TotalDataBytes int64            `json:"total_data_bytes"`
 	Apps           []BackupAppEntry `json:"apps"`
+
+	// UserCustom is opaque per-user data (folder groupings, dashboard
+	// order) that AppManagement has no way to fetch itself - it lives in a
+	// separate microservice this package has no client for. The frontend
+	// fetches it and passes it in at export time; on import it's handed
+	// back verbatim for the frontend to write back out. Never interpreted
+	// here.
+	UserCustom jsoniter.RawMessage `json:"user_custom,omitempty"`
 }
 
 type BackupAppEntry struct {
@@ -58,6 +69,11 @@ type ImportResult struct {
 	Imported []string     `json:"imported"`
 	Skipped  []SkippedApp `json:"skipped"`
 	Failed   []FailedApp  `json:"failed"`
+
+	// UserCustom is the archive's UserCustom blob, passed straight through
+	// unexamined - the frontend already has the app names that actually
+	// landed in Imported and can merge this in itself.
+	UserCustom jsoniter.RawMessage `json:"user_custom,omitempty"`
 }
 
 type SkippedApp struct {
@@ -86,7 +102,10 @@ type backupApp struct {
 // excludeData names apps whose compose config should still be included but
 // whose data directories should be skipped (the user transferring that
 // data some other way) - nil or empty includes every app's data as before.
-func ExportBackup(ctx context.Context, w io.Writer, excludeData map[string]bool) error {
+// userCustom is opaque per-user data (folder groupings, dashboard order)
+// the frontend fetched from the service that actually owns it and passed
+// straight through - see BackupManifest.UserCustom.
+func ExportBackup(ctx context.Context, w io.Writer, excludeData map[string]bool, userCustom jsoniter.RawMessage) error {
 	apps, err := collectBackupApps(ctx)
 	if err != nil {
 		return err
@@ -101,6 +120,7 @@ func ExportBackup(ctx context.Context, w io.Writer, excludeData map[string]bool)
 		FormatVersion: backupFormatVersion,
 		CreatedAt:     time.Now().UTC(),
 		ForkVersion:   ForkVersion,
+		UserCustom:    userCustom,
 	}
 	for _, a := range apps {
 		manifest.Apps = append(manifest.Apps, BackupAppEntry{
@@ -239,13 +259,62 @@ func composeAppToBackupApp(composeApp *ComposeApp) (backupApp, error) {
 	if err != nil {
 		return backupApp{}, err
 	}
+
+	dataPaths := bindMountSourcesOf(composeApp)
+	if storeInfo, err := composeApp.StoreInfo(false); err == nil && storeInfo != nil {
+		if iconPath, ok := customIconPathFromURL(storeInfo.Icon); ok {
+			if _, statErr := os.Stat(iconPath); statErr == nil {
+				// Not a bind mount - nothing mounts this file into any
+				// container - but restoring it to this exact same absolute
+				// path is exactly what every dataPaths entry already does,
+				// and x-casaos.icon (already captured as-is in composeYAML
+				// above) points at this literal path, so no separate
+				// archive section or URL rewriting is needed for the icon
+				// to keep working after import.
+				dataPaths = append(dataPaths, iconPath)
+			}
+		}
+	}
+
 	return backupApp{
 		name:        composeApp.Name,
 		displayName: composeAppDisplayName(composeApp),
 		sourceType:  "compose",
 		composeYAML: yamlBytes,
-		dataPaths:   bindMountSourcesOf(composeApp),
+		dataPaths:   dataPaths,
 	}, nil
+}
+
+// customIconSubdir mirrors the constant of the same name in the main CasaOS
+// module (service/system.go) - AppManagement has no client for that
+// service, but both run on the same host and share the same filesystem, so
+// reading the icon file directly is enough; no cross-service call needed.
+const customIconSubdir = "casaos-custom-icons"
+
+// customIconPathFromURL extracts the absolute host file path behind an
+// x-casaos.icon value that points at this server's own custom-icon store -
+// a URL of the form "/v1/custom-icons?path=<abs path>" written by the icon
+// upload flow (UI/src/components/Apps/ComposeConfig.vue) - and reports
+// ok=false for anything else (an external icon.casaos.io/Docker Hub URL, or
+// no icon set at all). Those need nothing done to survive export/import,
+// since they're already portable as a plain URL.
+func customIconPathFromURL(iconURL string) (path string, ok bool) {
+	if iconURL == "" {
+		return "", false
+	}
+	u, err := url.Parse(iconURL)
+	if err != nil || !strings.HasSuffix(u.Path, "/custom-icons") {
+		return "", false
+	}
+	raw := u.Query().Get("path")
+	if raw == "" {
+		return "", false
+	}
+	clean := filepath.Clean(raw)
+	if !filepath.IsAbs(clean) || filepath.Base(filepath.Dir(clean)) != customIconSubdir {
+		return "", false
+	}
+	return clean, true
 }
 
 // standaloneContainerToBackupApp converts a v1 standalone container to the
@@ -472,6 +541,13 @@ func writeDirEntries(tw *tar.Writer, root, archivePrefix string) error {
 type ImportPreview struct {
 	PreviewID string             `json:"preview_id"`
 	Apps      []ImportAppPreview `json:"apps"`
+
+	// UserCustom is the archive's UserCustom blob (see BackupManifest),
+	// echoed back unexamined so the frontend can preview/merge it - it's
+	// also echoed a second time in ImportResult once confirm actually
+	// applies the import, since which apps ended up Imported isn't known
+	// until then.
+	UserCustom jsoniter.RawMessage `json:"user_custom,omitempty"`
 }
 
 type ImportAppPreview struct {
@@ -484,9 +560,10 @@ type ImportAppPreview struct {
 }
 
 type ImportServicePreview struct {
-	ServiceName string                 `json:"service_name"`
-	Ports       []ImportPortPreview    `json:"ports"`
-	Volumes     []ImportVolumePreview  `json:"volumes"`
+	ServiceName string                `json:"service_name"`
+	Ports       []ImportPortPreview   `json:"ports"`
+	Volumes     []ImportVolumePreview `json:"volumes"`
+	Env         []ImportEnvPreview    `json:"env"`
 }
 
 type ImportPortPreview struct {
@@ -499,6 +576,11 @@ type ImportPortPreview struct {
 type ImportVolumePreview struct {
 	Target string `json:"target"` // container path
 	Source string `json:"source"` // host path, as originally exported
+}
+
+type ImportEnvPreview struct {
+	Key   string `json:"key"`
+	Value string `json:"value"` // as originally exported; a variable with no default (pass-through from the host shell) shows as empty
 }
 
 // ImportBackupPreview stages an uploaded archive under a fresh directory
@@ -535,7 +617,7 @@ func ImportBackupPreview(ctx context.Context, r io.Reader) (*ImportPreview, erro
 	}
 	tcpInUseSet, udpInUseSet := toPortSet(tcpInUse), toPortSet(udpInUse)
 
-	preview := &ImportPreview{PreviewID: previewID}
+	preview := &ImportPreview{PreviewID: previewID, UserCustom: manifest.UserCustom}
 	for _, entry := range manifest.Apps {
 		appPreview := ImportAppPreview{
 			Name:         entry.Name,
@@ -569,6 +651,18 @@ func ImportBackupPreview(ctx context.Context, r io.Reader) (*ImportPreview, erro
 					continue
 				}
 				svcPreview.Volumes = append(svcPreview.Volumes, ImportVolumePreview{Target: vol.Target, Source: vol.Source})
+			}
+			envKeys := make([]string, 0, len(svc.Environment))
+			for k := range svc.Environment {
+				envKeys = append(envKeys, k)
+			}
+			sort.Strings(envKeys) // compose-go's Environment is a map - sort for a stable review-screen order
+			for _, k := range envKeys {
+				value := ""
+				if v := svc.Environment[k]; v != nil {
+					value = *v
+				}
+				svcPreview.Env = append(svcPreview.Env, ImportEnvPreview{Key: k, Value: value})
 			}
 			appPreview.Services = append(appPreview.Services, svcPreview)
 		}
@@ -624,6 +718,7 @@ type AppImportDecision struct {
 	Skip    bool             `json:"skip"`
 	Ports   []PortOverride   `json:"ports"`
 	Volumes []VolumeOverride `json:"volumes"`
+	Env     []EnvOverride    `json:"env"`
 }
 
 // PortOverride identifies one port by (service, container port, protocol)
@@ -643,6 +738,15 @@ type VolumeOverride struct {
 	ServiceName string `json:"service_name"`
 	Target      string `json:"target"`
 	Source      string `json:"source"`
+}
+
+// EnvOverride identifies one environment variable by (service, key) and
+// gives its new value - matched against the key rather than position, since
+// compose-go's Environment is a map with no inherent order.
+type EnvOverride struct {
+	ServiceName string `json:"service_name"`
+	Key         string `json:"key"`
+	Value       string `json:"value"`
 }
 
 // ImportBackupConfirm reopens the staging directory ImportBackupPreview
@@ -683,9 +787,10 @@ func ImportBackupConfirm(ctx context.Context, previewID string, decisions []AppI
 		decisionByName[d.Name] = d
 	}
 
+	result := &ImportResult{UserCustom: manifest.UserCustom}
+
 	existingCompose, existingStandalone := existingAppNames(ctx)
 
-	result := &ImportResult{}
 	for _, entry := range manifest.Apps {
 		decision, hasDecision := decisionByName[entry.Name]
 		if hasDecision && decision.Skip {
@@ -720,6 +825,7 @@ func ImportBackupConfirm(ctx context.Context, previewID string, decisions []AppI
 		if hasDecision {
 			applyPortOverrides(composeApp, decision.Ports)
 			applyVolumeOverrides(composeApp, decision.Volumes, destinations)
+			applyEnvOverrides(composeApp, decision.Env)
 		}
 
 		validation, err := composeApp.GetPortsInUse()
@@ -793,6 +899,27 @@ func applyVolumeOverrides(composeApp *ComposeApp, overrides []VolumeOverride, de
 					destinations[vol.Source] = o.Source
 					vol.Source = o.Source
 				}
+			}
+		}
+	}
+}
+
+// applyEnvOverrides rewrites an environment variable's value to whatever
+// the review screen edited it to, matched by (service, key) - a key absent
+// from the service's original Environment is ignored rather than added, so
+// this can only edit what was actually exported.
+func applyEnvOverrides(composeApp *ComposeApp, overrides []EnvOverride) {
+	for _, o := range overrides {
+		if o.Value == "" {
+			continue
+		}
+		for i := range composeApp.Services {
+			if composeApp.Services[i].Name != o.ServiceName {
+				continue
+			}
+			if _, ok := composeApp.Services[i].Environment[o.Key]; ok {
+				value := o.Value
+				composeApp.Services[i].Environment[o.Key] = &value
 			}
 		}
 	}

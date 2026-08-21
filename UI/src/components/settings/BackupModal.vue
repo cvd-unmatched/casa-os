@@ -61,9 +61,25 @@ export default {
 			})
 		},
 
-		startExport() {
+		async startExport() {
 			const excluded = this.exportApps.filter(app => this.exportExcluded[app.name]).map(app => app.name)
-			window.location.href = this.$api.backup.getExportUrl(excluded)
+
+			// Folder groupings and dashboard order live in a different
+			// service AppManagement has no client for - fetch them here
+			// (best-effort - a failure just means the export goes out
+			// without them, not that export itself should fail) and hand
+			// them to the backend to embed as-is.
+			const [appGroups, appDisplayOrder] = await Promise.all([
+				this.$api.users.getCustomStorage('app_groups').then(res => res.data.data.data).catch(() => undefined),
+				this.$api.users.getCustomStorage('app_display_order').then(res => res.data.data.data).catch(() => undefined),
+			])
+			const userCustom = {}
+			if (appGroups)
+				userCustom.app_groups = appGroups
+			if (appDisplayOrder)
+				userCustom.app_display_order = appDisplayOrder
+
+			window.location.href = this.$api.backup.getExportUrl(excluded, userCustom)
 		},
 
 		pickImportFile() {
@@ -106,7 +122,11 @@ export default {
 				const data = res.data.data
 				this.preview = {
 					previewId: data.preview_id,
-					apps: (data.apps || []).map(app => ({ ...app, skip: app.name_conflict })),
+					apps: (data.apps || []).map(app => ({
+						...app,
+						skip: app.name_conflict,
+						services: (app.services || []).map(svc => ({ ...svc, envOpen: false })),
+					})),
 				}
 			}).catch((err) => {
 				this.error = err.response?.data?.message || this.$t('Could not read that archive.')
@@ -149,18 +169,64 @@ export default {
 					target: v.target,
 					source: v.source,
 				}))),
+				env: app.services.flatMap(svc => svc.env.map(e => ({
+					service_name: svc.service_name,
+					key: e.key,
+					value: e.value,
+				}))),
 			}))
 
 			this.confirming = true
 			this.error = ''
-			this.$api.backup.importConfirm(this.preview.previewId, apps).then((res) => {
+			this.$api.backup.importConfirm(this.preview.previewId, apps).then(async (res) => {
 				this.result = res.data.data
 				this.preview = null
+				await this.applyImportedUserCustom(this.result.user_custom)
 			}).catch((err) => {
 				this.error = err.response?.data?.message || this.$t('Import failed.')
 			}).finally(() => {
 				this.confirming = false
 			})
+		},
+
+		// Folder groupings and dashboard order came back verbatim from the
+		// archive (AppManagement has no client for the service that owns
+		// them, so it never touched their contents) - merge them in here,
+		// add-only: an existing folder with the same id is left alone
+		// rather than overwritten, and an imported folder only keeps the
+		// app names that actually made it into "Imported" this run, so a
+		// skipped/failed app never shows up in a folder with nothing behind
+		// it.
+		async applyImportedUserCustom(userCustom) {
+			if (!userCustom)
+				return
+			const importedNames = new Set(this.result.imported || [])
+
+			if (userCustom.app_groups && userCustom.app_groups.length) {
+				const existing = await this.$api.users.getCustomStorage('app_groups')
+					.then(res => res.data.data.data || []).catch(() => [])
+				const existingIds = new Set(existing.map(g => g.id))
+				const merged = existing.slice()
+				for (const group of userCustom.app_groups) {
+					if (existingIds.has(group.id))
+						continue
+					const appNames = (group.appNames || []).filter(name => importedNames.has(name))
+					if (!appNames.length)
+						continue
+					merged.push({ ...group, appNames })
+				}
+				if (merged.length !== existing.length)
+					await this.$api.users.setCustomStorage('app_groups', { data: merged })
+			}
+
+			if (userCustom.app_display_order && userCustom.app_display_order.length) {
+				const existing = await this.$api.users.getCustomStorage('app_display_order')
+					.then(res => res.data.data.data || []).catch(() => [])
+				const existingSet = new Set(existing)
+				const additions = userCustom.app_display_order.filter(name => importedNames.has(name) && !existingSet.has(name))
+				if (additions.length)
+					await this.$api.users.setCustomStorage('app_display_order', { data: [...existing, ...additions] })
+			}
 		},
 	},
 }
@@ -275,6 +341,19 @@ export default {
 										{{ $t('Browse…') }}
 									</b-button>
 								</div>
+
+								<template v-if="svc.env && svc.env.length">
+									<p class="is-size-7 has-text-grey is-clickable mt-1 mb-1" @click="svc.envOpen = !svc.envOpen">
+										<b-icon :icon="svc.envOpen ? 'down-outline' : 'right-outline'" pack="casa" size="is-small" />
+										{{ $t('Environment Variables') }} ({{ svc.env.length }})
+									</p>
+									<div v-if="svc.envOpen" class="ml-4">
+										<div v-for="e in svc.env" :key="`${svc.service_name}-${e.key}`" class="is-flex is-align-items-center mb-1">
+											<span class="is-size-7 has-text-grey env-label" :title="e.key">{{ e.key }}</span>
+											<b-input v-model="e.value" size="is-small" class="ml-2 is-flex-grow-1" />
+										</div>
+									</div>
+								</template>
 							</div>
 						</template>
 					</div>
@@ -342,6 +421,14 @@ export default {
 	}
 
 	.volume-label {
+		min-width: 8rem;
+		max-width: 8rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.env-label {
 		min-width: 8rem;
 		max-width: 8rem;
 		overflow: hidden;
