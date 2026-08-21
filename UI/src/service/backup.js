@@ -24,11 +24,18 @@ const backup = {
 	// token has to travel as a query param since a navigation can't set an
 	// Authorization header. excludeDataNames lists apps whose data should be
 	// skipped (their compose config is still included either way).
-	getExportUrl(excludeDataNames = []) {
+	// userCustom is a small opaque object (folder groupings, dashboard
+	// order) - AppManagement has no client for the service that actually
+	// owns that data, so the caller fetches it and passes it in here to be
+	// embedded as-is; unlike the archive body this is tiny, so a query
+	// param (unlike buffering the response) is fine.
+	getExportUrl(excludeDataNames = [], userCustom = null) {
 		const token = localStorage.getItem('access_token')
 		const params = new URLSearchParams({ token })
 		if (excludeDataNames.length)
 			params.set('exclude_data', excludeDataNames.join(','))
+		if (userCustom && Object.keys(userCustom).length)
+			params.set('user_custom', JSON.stringify(userCustom))
 		return `/v1${PREFIX}/export?${params.toString()}`
 	},
 
