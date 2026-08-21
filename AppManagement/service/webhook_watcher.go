@@ -34,6 +34,45 @@ var crashState = &crashWatcherState{
 	countSince: map[string]int{},
 }
 
+// expectedStopWindow is how long after CasaOS itself stops, restarts,
+// uninstalls, or recreates (an update or a settings apply) a compose app's
+// containers the resulting "die" event(s) are treated as expected rather
+// than a crash. Long enough to cover a slow stop/pull/recreate, short
+// enough that the same app dying again later for real reasons still gets
+// reported.
+const expectedStopWindow = 5 * time.Minute
+
+type expectedStopState struct {
+	mu    sync.Mutex
+	until map[string]time.Time // compose project (app) name -> expires
+}
+
+var expectedStops = &expectedStopState{until: map[string]time.Time{}}
+
+// ExpectAppStop marks appName (a compose app/project name) as about to be
+// intentionally stopped, restarted, uninstalled, or recreated by CasaOS
+// itself, so the crash watcher doesn't mistake the container "die" event(s)
+// that causes for a crash. Call this right before triggering the action.
+func ExpectAppStop(appName string) {
+	expectedStops.mu.Lock()
+	defer expectedStops.mu.Unlock()
+	expectedStops.until[appName] = time.Now().Add(expectedStopWindow)
+}
+
+func (s *expectedStopState) isExpected(appName string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	until, ok := s.until[appName]
+	if !ok {
+		return false
+	}
+	if time.Now().After(until) {
+		delete(s.until, appName)
+		return false
+	}
+	return true
+}
+
 // recordAndShouldNotify records one crash for key and reports whether the
 // cooldown has elapsed since the last notification for it. count is the
 // number of crashes (including this one) since the last notification was
@@ -109,6 +148,13 @@ func handleDieEvent(msg events.Message) {
 	if project == "" {
 		// Not a container Docker Compose (and therefore CasaOS) manages -
 		// could be anything else running on the host.
+		return
+	}
+
+	if expectedStops.isExpected(project) {
+		// CasaOS itself just stopped/restarted/uninstalled/recreated this
+		// app - a non-zero exit here (SIGTERM/SIGKILL during a forced stop
+		// is common and normal) isn't a crash.
 		return
 	}
 
