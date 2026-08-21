@@ -282,7 +282,7 @@ func bindMountSourcesOf(composeApp *ComposeApp) []string {
 	var paths []string
 	for _, svc := range composeApp.Services {
 		for _, vol := range svc.Volumes {
-			if vol.Type != "bind" || vol.Source == "" || seen[vol.Source] {
+			if vol.Type != "bind" || vol.Source == "" || seen[vol.Source] || isHostSystemPassthrough(vol.Source) {
 				continue
 			}
 			seen[vol.Source] = true
@@ -290,6 +290,46 @@ func bindMountSourcesOf(composeApp *ComposeApp) []string {
 		}
 	}
 	return paths
+}
+
+// hostSystemPassthroughExact and hostSystemPassthroughPrefixes list bind
+// sources that are host runtime/system resources, not application data -
+// a dbus or docker socket, device nodes, or an /etc file a compose file
+// passes straight through from the host (e.g. Home Assistant's
+// /run/dbus:/run/dbus mount). Every one of these already exists, or gets
+// recreated by the OS, on any host at boot - archiving one and restoring
+// it onto a different host's live copy is never correct, and collides with
+// what's already there.
+var hostSystemPassthroughExact = map[string]bool{
+	"/run":             true,
+	"/var/run":         true,
+	"/dev":             true,
+	"/proc":            true,
+	"/sys":             true,
+	"/etc/localtime":   true,
+	"/etc/timezone":    true,
+	"/etc/hosts":       true,
+	"/etc/resolv.conf": true,
+}
+
+var hostSystemPassthroughPrefixes = []string{
+	"/run/",
+	"/var/run/",
+	"/dev/",
+	"/proc/",
+	"/sys/",
+}
+
+func isHostSystemPassthrough(absSource string) bool {
+	if hostSystemPassthroughExact[absSource] {
+		return true
+	}
+	for _, prefix := range hostSystemPassthroughPrefixes {
+		if strings.HasPrefix(absSource, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func composeArchivePath(appName string) string {
@@ -953,6 +993,17 @@ func restoreDataPathsWithOverrides(sessionDir string, originalDataPaths []string
 		destination := originalPath
 		if d, ok := destinations[originalPath]; ok && d != "" {
 			destination = d
+		}
+		if _, err := os.Lstat(destination); err == nil {
+			// Something's already at this destination - most often a
+			// host-provided system path (a dbus/docker socket, a device
+			// node) that every host already has its own live copy of, so
+			// ours is neither needed nor safe to drop on top of it (and
+			// os.Rename would just fail with EEXIST/ENOTEMPTY anyway).
+			// Leave it alone rather than failing this app's entire import
+			// over one path.
+			logger.Info("backup: restore destination already exists, leaving it in place", zap.String("path", destination))
+			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 			return err
