@@ -489,6 +489,11 @@ func (a *ComposeApp) UpWithCheckRequire(ctx context.Context, service api.Service
 }
 
 func (a *ComposeApp) PullAndApply(ctx context.Context, newComposeYAML []byte) error {
+	// covers both Update() (an app-store/auto-update) and Apply() (a
+	// settings save) - both funnel through here, and both recreate
+	// containers, which produces a "die" event for the old one.
+	ExpectAppStop(a.Name)
+
 	// backup current compose file
 	currentComposeFile := a.ComposeFiles[0]
 
@@ -637,6 +642,8 @@ func (a *ComposeApp) Uninstall(ctx context.Context, deleteConfigFolder bool) err
 
 	// stop
 	if err := func() error {
+		ExpectAppStop(a.Name)
+
 		go PublishEventWrapper(ctx, common.EventTypeContainerStopBegin, nil)
 
 		defer PublishEventWrapper(ctx, common.EventTypeContainerStopEnd, nil)
@@ -807,6 +814,7 @@ func (a *ComposeApp) SetStatus(ctx context.Context, status codegen.RequestCompos
 			}
 		}(ctx)
 	case codegen.RequestComposeAppStatusStop:
+		ExpectAppStop(a.Name)
 		go func(ctx context.Context) {
 			go PublishEventWrapper(ctx, common.EventTypeAppStopBegin, nil)
 
@@ -821,6 +829,7 @@ func (a *ComposeApp) SetStatus(ctx context.Context, status codegen.RequestCompos
 			}
 		}(ctx)
 	case codegen.RequestComposeAppStatusRestart:
+		ExpectAppStop(a.Name)
 		go func(ctx context.Context) {
 			go PublishEventWrapper(ctx, common.EventTypeAppRestartBegin, nil)
 
