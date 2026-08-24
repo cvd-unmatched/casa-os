@@ -128,6 +128,7 @@ import { ice_i18n } from '@/mixins/base/common-i18n'
 import YAML from 'yamljs'
 import { nanoid } from 'nanoid'
 import { FOLDER_THEMES } from '@/utils/folderThemes'
+import { resolveOpenAppHost } from '@/utils/openAppHost'
 
 const SYNCTHING_STORE_ID = 74
 
@@ -288,10 +289,11 @@ export default {
 		async getList () {
 			try {
 				const orgAppList = await this.$openAPI.appGrid.getAppGrid().then(res => res.data.data || [])
+				const openAppHost = await resolveOpenAppHost(this.$baseIp)
 				let orgOldAppList = [],
 					orgNewAppList = []
 				orgAppList.forEach(item => {
-					item.hostname = item.hostname || this.$baseIp
+					item.hostname = item.hostname || openAppHost
 					// Container app does not have icon.
 					item.icon = item.icon || require(`@/assets/img/app/default.svg`)
 					if (item.app_type === 'v1app' || item.app_type === 'container') {

@@ -502,6 +502,17 @@ func GetSystemNetInfo(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: newNet})
 }
 
+// @Summary get every address (LAN, Tailscale) this box can plausibly be reached at, for picking which one to open an app's port on
+// @Produce  application/json
+// @Tags sys
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /sys/access-ips [get]
+func GetAccessIPs(ctx echo.Context) error {
+	ips := service.MyService.System().GetAccessIPs()
+	return ctx.JSON(http.StatusOK, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: ips})
+}
+
 // @Summary active connections grouped by remote IP
 // @Produce  application/json
 // @Accept application/json

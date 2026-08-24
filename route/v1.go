@@ -74,6 +74,7 @@ func InitV1Router() http.Handler {
 
 			v1SysGroup.GET("/hardware", v1.GetSystemHardwareInfo) // hardware/info
 			v1SysGroup.GET("/disks-usage", v1.GetAllDisksUsage)
+			v1SysGroup.GET("/access-ips", v1.GetAccessIPs)
 			v1SysGroup.POST("/custom-icon", v1.PostCustomIcon)
 			v1SysGroup.POST("/custom-icon-from-url", v1.PostCustomIconFromURL)
 

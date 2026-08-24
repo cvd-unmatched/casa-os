@@ -7,6 +7,8 @@
  * Copyright (c) 2022 by IceWhale, All Rights Reserved.
  */
 
+import { resolveOpenAppHost } from '@/utils/openAppHost'
+
 export default {
 	methods: {
 		openAppToNewWindow(appInfo) {
@@ -44,7 +46,7 @@ export default {
 					"id": appInfo.id,
 					"name": appInfo.id,
 					scheme: containerInfoV2.scheme,
-					hostname: containerInfoV2.hostname || this.$baseIp,
+					hostname: containerInfoV2.hostname || await resolveOpenAppHost(this.$baseIp),
 					port: containerInfoV2.port_map,
 					index: containerInfoV2.index,
 					image: allinfo.compose.services[appInfo.id].image,
