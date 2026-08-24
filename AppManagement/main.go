@@ -88,6 +88,12 @@ func main() {
 
 		webhook.Version = forkVersion
 		service.ForkVersion = forkVersion
+
+		if hostname, err := os.Hostname(); err == nil {
+			webhook.DeviceName = hostname
+		} else {
+			logger.Error("failed to get hostname for webhook notifications", zap.Error(err))
+		}
 	}
 
 	// setup cron
