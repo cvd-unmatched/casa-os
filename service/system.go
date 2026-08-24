@@ -322,7 +322,14 @@ func (c *systemService) GetAllDisksUsage() []DiskUsageInfo {
 
 	seen := map[string]bool{}
 	for _, p := range partitions {
-		if pseudoFstypes[p.Fstype] || seen[p.Mountpoint] {
+		// A read-only mount reporting 100% used isn't a warning - it's just
+		// how a fixed-size, read-only source works (an ISO passed through
+		// from a Proxmox host, a squashfs snap, install media, etc) and
+		// there's nothing to free up on it either way. Confirmed live: a
+		// Proxmox-mounted Ubuntu installer ISO tripped the disk-warning
+		// webhook every time, every install, since an ISO is definitionally
+		// always "full."
+		if pseudoFstypes[p.Fstype] || seen[p.Mountpoint] || isReadOnlyMount(p.Opts) {
 			continue
 		}
 		seen[p.Mountpoint] = true
@@ -344,6 +351,17 @@ func (c *systemService) GetAllDisksUsage() []DiskUsageInfo {
 	}
 
 	return result
+}
+
+// isReadOnlyMount reports whether a partition's mount options include "ro" -
+// the same flag `mount`/`/proc/mounts` use.
+func isReadOnlyMount(opts []string) bool {
+	for _, opt := range opts {
+		if opt == "ro" {
+			return true
+		}
+	}
+	return false
 }
 
 // AccessIPs is every address this box could plausibly be reached at other
