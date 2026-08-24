@@ -471,6 +471,14 @@ export default {
       const composeServicesItem = {}
       // Image
       composeServicesItem.image = composeServicesItemInput.image
+      // Build - a service that builds from source instead of referencing a
+      // prebuilt image (e.g. imported via the "Installable from GitHub"
+      // widget for a repo with no release). Passed through as-is; this
+      // wizard has no UI for editing a build context, just for leaving it
+      // alone rather than silently dropping it.
+      if (composeServicesItemInput.build !== undefined) {
+        composeServicesItem.build = composeServicesItemInput.build
+      }
       // Envs
       if (composeServicesItemInput.environment) {
         const envArray = Array.isArray(composeServicesItemInput.environment)
@@ -870,7 +878,12 @@ export default {
     <b-tabs class="has-text-full-03" style="height: 100%" :value="firstAppName">
       <b-tab-item v-for="(service, key) in configData.services" :key="key" :label="key" :value="key" @click="current_service = key">
         <ValidationObserver :ref="`${key}valida`">
-          <b-field grouped>
+          <b-field v-if="service.build">
+            <p class="help">
+              {{ $t('Builds from source ({context}) instead of a prebuilt image.', { context: typeof service.build === 'string' ? service.build : (service.build.context || '.') }) }}
+            </p>
+          </b-field>
+          <b-field v-else grouped>
             <ValidationProvider v-slot="{ errors, valid }" class="is-flex-grow-1 mr-3" name="Image0" rules="required">
               <b-field :label="`${$t('Docker Image')} *`" :message="$t(errors)" :type="{ 'is-danger': errors[0], 'is-success': valid }" class="mb-3">
                 <b-input

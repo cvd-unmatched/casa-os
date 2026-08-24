@@ -139,6 +139,7 @@ export default {
 
 					return {
 						full_name: repo.full_name,
+						default_branch: repo.default_branch,
 						compose,
 						installed: installedByImage || installedByName,
 					}
@@ -183,8 +184,44 @@ export default {
 			}
 		},
 
+		// Whether any service builds from source (build:) instead of
+		// referencing a prebuilt image - such a repo has no runnable image
+		// on its own, only findComposeFile's one fetched YAML file, so
+		// installing it needs the actual repo contents fetched too (see
+		// source_repo below).
+		hasBuildService(composeYaml) {
+			try {
+				const parsed = YAML.parse(composeYaml)
+				const services = parsed?.services || {}
+				return Object.values(services).some(service => service && service.build)
+			}
+			catch (error) {
+				return false
+			}
+		},
+
 		install(repo) {
-			this.$EventBus.$emit(events.SHOW_CUSTOM_INSTALL_WITH_COMPOSE, repo.compose)
+			let compose = repo.compose
+			if (this.hasBuildService(compose)) {
+				try {
+					const parsed = YAML.parse(compose)
+					const [owner, name] = repo.full_name.split('/')
+					parsed['x-casaos'] = parsed['x-casaos'] || {}
+					// Consumed server-side (ComposeService.Install) to clone
+					// the repo's actual source into the app's working
+					// directory before building - see AppManagement's
+					// fetchSourceRepoIfNeeded.
+					parsed['x-casaos'].source_repo = `git::https://github.com/${owner}/${name}.git?ref=${repo.default_branch}`
+					compose = YAML.stringify(parsed)
+				}
+				catch (error) {
+					// Fall through with the original compose text - install
+					// will just fail downstream the same way it always did
+					// for a build-based repo, rather than silently dropping
+					// the user's click.
+				}
+			}
+			this.$EventBus.$emit(events.SHOW_CUSTOM_INSTALL_WITH_COMPOSE, compose)
 		},
 	},
 }
