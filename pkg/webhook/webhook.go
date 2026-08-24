@@ -32,6 +32,15 @@ var ConfigFilePath = filepath.Join(constants.DefaultConfigPath, "webhooks.json")
 // means SSHing in to check the version by hand.
 var Version string
 
+// DeviceName identifies which box sent a notification - the OS hostname,
+// set once at startup by main.go. Prefixed onto every outbound
+// notification's title (see payloadFor) so a disk-warning/etc alert is
+// still identifiable at a glance on a phone's notification banner, which
+// usually only shows the title - useful the moment there's more than one
+// CasaOS box sharing the same webhook destination. Mirrors the identical
+// field in AppManagement's own copy of this package.
+var DeviceName string
+
 type Destination struct {
 	ID     string   `json:"id"`
 	Name   string   `json:"name"`
@@ -177,6 +186,9 @@ func SendTest(destType, destURL string) error {
 }
 
 func payloadFor(destType, eventType, title, message string, fields map[string]string) ([]byte, error) {
+	if DeviceName != "" {
+		title = "[" + DeviceName + "] " + title
+	}
 	switch destType {
 	case "discord":
 		embed := map[string]interface{}{
@@ -206,6 +218,7 @@ func payloadFor(destType, eventType, title, message string, fields map[string]st
 			"message":     message,
 			"timestamp":   time.Now().UTC().Format(time.RFC3339),
 			"forkVersion": Version,
+			"device":      DeviceName,
 			"data":        fields,
 		})
 	}
