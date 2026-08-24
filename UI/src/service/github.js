@@ -44,6 +44,23 @@ export default {
 	},
 
 	/**
+	 * @description: Fetches a single repo's metadata (default_branch, in
+	 * particular) - for installing from a repo the token doesn't own or
+	 * collaborate on (so it wouldn't show up in listRepos), pasted in by
+	 * full_name or URL. Works for any repo the token can see, public repos
+	 * included regardless of what the token itself is scoped to, since
+	 * public repo metadata needs no elevated permission.
+	 * @param {string} token
+	 * @param {string} owner
+	 * @param {string} repo
+	 * @return {Promise<Object>}
+	 */
+	async getRepo(token, owner, repo) {
+		const res = await github.get(`/repos/${owner}/${repo}`, { headers: authHeader(token) })
+		return res.data
+	},
+
+	/**
 	 * @description: Fetches a file's raw text content, or null if it doesn't exist.
 	 * @param {string} token
 	 * @param {string} owner

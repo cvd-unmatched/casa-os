@@ -27,6 +27,21 @@
 				{{ $t('No repos with a compose file found.') }}
 			</div>
 
+			<!-- Install from someone else's repo Start -->
+			<div v-if="connected" class="install-from-url is-flex is-align-items-center mb-2">
+				<b-input
+					v-model="urlInput" size="is-small" expanded
+					:placeholder="$t('Or paste any repo, e.g. owner/repo')" @keyup.native.enter="installFromUrl"
+				/>
+				<b-button
+					size="is-small" rounded type="is-dark" class="ml-2" :loading="installingFromUrl"
+					@click="installFromUrl"
+				>
+					{{ $t('Install') }}
+				</b-button>
+			</div>
+			<!-- Install from someone else's repo End -->
+
 			<div v-for="repo in repos" :key="repo.full_name" class="repo-row mb-2 is-flex is-align-items-center">
 				<span class="one-line is-flex-grow-1 is-size-7" :title="repo.full_name">{{ repo.full_name }}</span>
 				<span v-if="repo.installed" class="tag is-size-7 ml-2">{{ $t('Installed') }}</span>
@@ -71,6 +86,8 @@ export default {
 			repos: [],
 			scannedCount: 0,
 			tokenLacksContentAccess: false,
+			urlInput: '',
+			installingFromUrl: false,
 		}
 	},
 	mounted() {
@@ -222,6 +239,60 @@ export default {
 				}
 			}
 			this.$EventBus.$emit(events.SHOW_CUSTOM_INSTALL_WITH_COMPOSE, compose)
+		},
+
+		// Accepts a full URL (https://github.com/owner/repo, optionally with
+		// a trailing path/query), a bare github.com/owner/repo, or just
+		// owner/repo.
+		parseRepoUrl(input) {
+			const trimmed = (input || '').trim()
+			const match = trimmed.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s]+)\/([^/\s#?]+)/i)
+				|| trimmed.match(/^([^/\s]+)\/([^/\s]+)$/)
+			if (!match) return null
+			return { owner: match[1], repo: match[2].replace(/\.git$/, '') }
+		},
+
+		// Installs from any repo, not just ones the connected account owns
+		// or collaborates on (which is all scan() ever sees) - reuses the
+		// exact same findComposeFile/install path scan() results go
+		// through, just fetches the one repo's metadata (default_branch)
+		// directly instead of pulling it from listRepos.
+		async installFromUrl() {
+			if (this.installingFromUrl) return
+			const parsed = this.parseRepoUrl(this.urlInput)
+			if (!parsed) {
+				this.$buefy.toast.open({
+					message: this.$t('Paste a GitHub repo URL, like github.com/owner/repo.'),
+					type: 'is-danger',
+				})
+				return
+			}
+
+			this.installingFromUrl = true
+			try {
+				const repoInfo = await this.$github.getRepo(this.token, parsed.owner, parsed.repo)
+				const compose = await this.$github.findComposeFile(this.token, parsed.owner, parsed.repo, repoInfo.default_branch)
+				if (!compose) {
+					this.$buefy.toast.open({
+						message: this.$t('No compose file found in that repo.'),
+						type: 'is-danger',
+					})
+					return
+				}
+				this.install({ full_name: repoInfo.full_name, default_branch: repoInfo.default_branch, compose })
+				this.urlInput = ''
+			}
+			catch (error) {
+				this.$buefy.toast.open({
+					message: error.response && error.response.status === 404
+						? this.$t('Repo not found - check the URL and that it\'s public.')
+						: this.$t('Could not read that repo.'),
+					type: 'is-danger',
+				})
+			}
+			finally {
+				this.installingFromUrl = false
+			}
 		},
 	},
 }
