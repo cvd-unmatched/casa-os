@@ -394,6 +394,11 @@ func (a *ComposeApp) Pull(ctx context.Context) error {
 	serviceNum := len(a.Services)
 
 	for i, app := range a.Services {
+		if app.Image == "" {
+			// build-only service (build: with no image:) - nothing to
+			// pull, the build step inside Create() produces its image.
+			continue
+		}
 		if err := func() error {
 			go PublishEventWrapper(ctx, common.EventTypeImagePullBegin, map[string]string{
 				common.PropertyTypeImageName.Name: app.Image,
@@ -437,6 +442,7 @@ func (a *ComposeApp) Up(ctx context.Context, service api.Service) error {
 	a.injectEnvVariableToComposeApp()
 
 	if err := service.Up(ctx, (*codegen.ComposeApp)(a), api.UpOptions{
+		Create: api.CreateOptions{Build: &api.BuildOptions{}},
 		Start: api.StartOptions{
 			CascadeStop: true,
 			Wait:        true,
@@ -553,7 +559,7 @@ func (a *ComposeApp) PullAndApply(ctx context.Context, newComposeYAML []byte) er
 
 func (a *ComposeApp) Create(ctx context.Context, options api.CreateOptions, service api.Service) error {
 	a.injectEnvVariableToComposeApp()
-	return service.Create(ctx, (*codegen.ComposeApp)(a), api.CreateOptions{})
+	return service.Create(ctx, (*codegen.ComposeApp)(a), options)
 }
 
 func (a *ComposeApp) PullAndInstall(ctx context.Context) error {
@@ -604,7 +610,13 @@ func (a *ComposeApp) PullAndInstall(ctx context.Context) error {
 			a.Services[i].Devices = deviceMapFiltered
 		}
 
-		if err := a.Create(ctx, api.CreateOptions{}, service); err != nil {
+		// Build is nil-safe for a project with no build-based services -
+		// compose/v2 only builds a service that actually declares `build:`,
+		// so this is a no-op for the vast majority of apps (App Store
+		// installs, hand-written compose) and only does real work for a
+		// GitHub-imported app whose compose file uses build: instead of a
+		// prebuilt image.
+		if err := a.Create(ctx, api.CreateOptions{Build: &api.BuildOptions{}}, service); err != nil {
 			go PublishEventWrapper(ctx, common.EventTypeContainerCreateError, map[string]string{
 				common.PropertyTypeMessage.Name: err.Error(),
 			})

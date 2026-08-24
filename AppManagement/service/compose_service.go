@@ -8,6 +8,7 @@ import (
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/common"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/config"
+	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/utils/downloadHelper"
 	"github.com/IceWhaleTech/CasaOS-Common/utils/file"
 	"github.com/IceWhaleTech/CasaOS-Common/utils/logger"
 	timeutils "github.com/IceWhaleTech/CasaOS-Common/utils/time"
@@ -61,6 +62,17 @@ func (s *ComposeService) Install(ctx context.Context, composeApp *ComposeApp) er
 		return err
 	}
 
+	// Must happen before the compose YAML is written below - go-getter's
+	// git clone refuses a non-empty destination directory, so the working
+	// directory has to still be empty at this point.
+	if err := fetchSourceRepoIfNeeded(composeApp, workingDirectory); err != nil {
+		logger.Error("failed to fetch build source for compose app", zap.Error(err), zap.String("name", composeApp.Name))
+		if err := file.RMDir(workingDirectory); err != nil {
+			logger.Error("failed to cleanup working dir after failing to fetch build source", zap.Error(err), zap.String("path", workingDirectory))
+		}
+		return err
+	}
+
 	yamlFilePath := filepath.Join(workingDirectory, common.ComposeYAMLFileName)
 
 	if err := os.WriteFile(yamlFilePath, composeYAMLInterpolated, 0o600); err != nil {
@@ -109,6 +121,26 @@ func (s *ComposeService) Install(ctx context.Context, composeApp *ComposeApp) er
 	}(ctx)
 
 	return nil
+}
+
+// fetchSourceRepoIfNeeded downloads the repo a service's build context
+// comes from into workingDirectory, when x-casaos.source_repo is set - a
+// service using `build:` instead of a prebuilt `image:` needs its actual
+// source (Dockerfile, etc) on disk to build from, not just the compose
+// YAML the rest of Install writes there. A no-op for every other app -
+// App Store installs, hand-written compose, anything referencing only
+// prebuilt images - since source_repo is only ever set by the GitHub
+// "import a repo with no release" flow.
+func fetchSourceRepoIfNeeded(composeApp *ComposeApp, workingDirectory string) error {
+	ext, ok := composeApp.Extensions[common.ComposeExtensionNameXCasaOS].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	sourceRepo, ok := ext["source_repo"].(string)
+	if !ok || sourceRepo == "" {
+		return nil
+	}
+	return downloadHelper.Download(sourceRepo, workingDirectory)
 }
 
 func (s *ComposeService) Uninstall(ctx context.Context, composeApp *ComposeApp, deleteConfigFolder bool) error {
