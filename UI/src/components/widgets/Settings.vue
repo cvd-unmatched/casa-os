@@ -24,9 +24,9 @@
 						<div v-for="(item, index) in settingsData" :key="`setting_${index}`"
 							class="is-flex is-align-items-center item">
 							<b-icon class="drag-handle mr-2 is-clickable" icon="drag-vertical" pack="mdi" size="is-small"></b-icon>
-							<div class="is-flex is-align-items-center is-flex-grow-1">
+							<div class="is-flex is-align-items-center is-flex-grow-1 item-title-row">
 								<b-icon :icon="getIcon(item.name)" pack="casa" class="mr-2"></b-icon>
-								<b>{{ $t(getTitle(item.name)) }}</b>
+								<b class="item-title">{{ $t(getTitle(item.name)) }}</b>
 							</div>
 							<b-field>
 								<b-switch v-model="item.show" class="is-flex-direction-row-reverse mr-0" size="is-small"
@@ -131,6 +131,21 @@ export default {
 
 	.item {
 		margin: 1.25rem 0;
+	}
+
+	// flex-grow-1 alone still forces this row wide enough to fit its title
+	// text in full - min-width: 0 lets it actually shrink, so a long title
+	// ("Installable from GitHub", "App Network Usage") truncates with an
+	// ellipsis instead of wrapping onto a second line and making just that
+	// row taller than the rest, which threw off where the drag handle sat.
+	.item-title-row {
+		min-width: 0;
+	}
+
+	.item-title {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.circle-btn {
