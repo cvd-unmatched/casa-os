@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -108,6 +109,11 @@ func main() {
 	}
 
 	webhook.Version = common.ForkVersion
+	if hostname, err := os.Hostname(); err == nil {
+		webhook.DeviceName = hostname
+	} else {
+		logger.Error("failed to get hostname for webhook notifications", zap.Error(err))
+	}
 
 	v1Router := route.InitV1Router()
 
