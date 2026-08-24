@@ -71,6 +71,7 @@ type SystemService interface {
 	GetNetState(name string) string
 	GetDiskInfo() *disk.UsageStat
 	GetAllDisksUsage() []DiskUsageInfo
+	GetAccessIPs() AccessIPs
 	SaveCustomIcon(mountpoint string, fileHeader *multipart.FileHeader) (string, error)
 	SaveCustomIconFromURL(mountpoint string, sourceURL string) (string, error)
 	ResolveCustomIconPath(requestedPath string) (string, error)
@@ -342,6 +343,39 @@ func (c *systemService) GetAllDisksUsage() []DiskUsageInfo {
 		})
 	}
 
+	return result
+}
+
+// AccessIPs is every address this box could plausibly be reached at other
+// than whatever hostname the browser currently has open - used to let a
+// user pick a working address for opening an app's own port when the
+// current page's hostname doesn't route there directly (e.g. a Cloudflare
+// Tunnel domain that only proxies the dashboard itself, not every app's
+// port).
+type AccessIPs struct {
+	LanIPs      []string `json:"lan_ips"`
+	TailscaleIP string   `json:"tailscale_ip,omitempty"`
+}
+
+// GetAccessIPs splits every currently-configured IPv4 address into LAN vs
+// Tailscale, by address range (100.64.0.0/10 is Tailscale's, see
+// ip_helper.IsTailscaleIP) rather than interface name - works the same
+// whether or not the tailscale CLI is even installed, since it only reads
+// addresses the kernel already has configured.
+func (c *systemService) GetAccessIPs() AccessIPs {
+	result := AccessIPs{}
+	for _, ipStr := range ip_helper.GetDeviceAllIPv4() {
+		ip := net2.ParseIP(ipStr)
+		if ip == nil {
+			continue
+		}
+		if ip_helper.IsTailscaleIP(ip) {
+			result.TailscaleIP = ipStr
+			continue
+		}
+		result.LanIPs = append(result.LanIPs, ipStr)
+	}
+	sort.Strings(result.LanIPs)
 	return result
 }
 

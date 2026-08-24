@@ -44,6 +44,14 @@ const sys = {
 		return api.get(`${PREFIX}/connections`);
 	},
 
+	// every address (LAN, Tailscale) this box can plausibly be reached at -
+	// lets a user pick a working one for opening an app's port when the
+	// current page's hostname doesn't route there (e.g. a Cloudflare Tunnel
+	// domain that only proxies the dashboard itself).
+	getAccessIPs() {
+		return api.get(`${PREFIX}/access-ips`);
+	},
+
 	// get memory info
 	getMemoryInfo() {
 		return api.get(`${PREFIX}/mem`);

@@ -81,6 +81,19 @@ func GetDeviceAllIPv4() map[string]string {
 	}
 	return address
 }
+
+// IsTailscaleIP reports whether ip falls in the CGNAT range Tailscale
+// assigns every node's IP from (100.64.0.0/10) - checking the address
+// range rather than a specific interface name works regardless of OS
+// (tailscale0 on Linux, utun* on macOS, etc).
+func IsTailscaleIP(ip net.IP) bool {
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return false
+	}
+	return ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127
+}
+
 func HasLocalIP(ip net.IP) bool {
 	if ip.IsLoopback() {
 		return true
