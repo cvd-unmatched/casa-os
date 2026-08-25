@@ -1774,8 +1774,7 @@ export default {
           <h3
             v-dompurify-html="currentInstallAppText"
             :class="currentInstallAppTextClass"
-            class="title is-6 has-text-centered"
-            style="height: 20px"
+            class="title is-6 has-text-centered install-status-text"
           />
         </div>
       </section>
@@ -2134,6 +2133,20 @@ export default {
 
 ._hideOverflow {
     overflow: unset;
+}
+
+// The install status line used to be a fixed 20px tall, sized for a short
+// "Installing"/"Installation completed" message - a real error (a Docker
+// build failure, for instance) is often much longer and either got clipped
+// outright or overflowed illegibly, with no way to select and copy it out
+// to report the problem. Lets it wrap and scroll instead, and explicitly
+// keeps text selectable in case something upstream disabled it.
+.install-status-text {
+    height: auto;
+    max-height: 8rem;
+    overflow-y: auto;
+    overflow-wrap: break-word;
+    user-select: text;
 }
 
 ._b-line {
