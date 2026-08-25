@@ -984,17 +984,6 @@ export default {
             </p>
           </b-field>
 
-          <b-field
-            v-if="key === firstAppName && configData['x-casaos'].source_repo"
-            :label="$t('.env values')"
-            :message="$t('This repo\'s compose file references ${VAR} placeholders - paste real KEY=VALUE lines here (same as a .env file) so they resolve instead of coming through empty.')"
-          >
-            <b-input
-              v-model="configData['x-casaos'].env_file" type="textarea" rows="4"
-              placeholder="POSTGRES_PASSWORD=some-real-value"
-            />
-          </b-field>
-
           <b-field v-if="key === firstAppName" label="Web UI">
             <b-select v-model="configData['x-casaos'].scheme">
               <option value="http">

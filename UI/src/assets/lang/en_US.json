@@ -101,8 +101,6 @@
   "Repo not found - check the URL and that it's public.": "Repo not found - check the URL and that it's public.",
   "Could not read that repo.": "Could not read that repo.",
   "Builds from source ({context}) instead of a prebuilt image.": "Builds from source ({context}) instead of a prebuilt image.",
-  ".env values": ".env values",
-  "This repo's compose file references ${VAR} placeholders - paste real KEY=VALUE lines here (same as a .env file) so they resolve instead of coming through empty.": "This repo's compose file references ${VAR} placeholders - paste real KEY=VALUE lines here (same as a .env file) so they resolve instead of coming through empty.",
   "Your token can list repos but not read their files. Edit it at {url}, enable Contents: Read-only under Repository permissions, then reconnect.": "Your token can list repos but not read their files. Edit it at {url}, enable Contents: Read-only under Repository permissions, then reconnect.",
   "Installed": "Installed",
   "Scanned {count} repos.": "Scanned {count} repos.",
