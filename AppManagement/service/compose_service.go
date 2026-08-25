@@ -76,6 +76,14 @@ func (s *ComposeService) Install(ctx context.Context, composeApp *ComposeApp) er
 		return err
 	}
 
+	if err := applyEnvFileIfProvided(composeApp, workingDirectory); err != nil {
+		logger.Error("failed to write .env for compose app", zap.Error(err), zap.String("name", composeApp.Name))
+		if err := file.RMDir(workingDirectory); err != nil {
+			logger.Error("failed to cleanup working dir after failing to write .env", zap.Error(err), zap.String("path", workingDirectory))
+		}
+		return err
+	}
+
 	yamlFilePath := filepath.Join(workingDirectory, common.ComposeYAMLFileName)
 
 	if err := os.WriteFile(yamlFilePath, composeYAMLInterpolated, 0o600); err != nil {
@@ -199,6 +207,35 @@ func fetchSourceRepoIfNeeded(composeApp *ComposeApp, workingDirectory string) er
 		return err
 	}
 	return downloadHelper.Download(sourceRepo, workingDirectory)
+}
+
+// applyEnvFileIfProvided writes x-casaos.env_file (if set) into a .env
+// file in workingDirectory. LoadComposeAppFromConfigFile's cli.WithDotEnv
+// already loads a project directory's .env by convention (the same as a
+// plain `docker compose up` would), so this is the standard way for a
+// compose file's own ${VAR}/${VAR:?msg} references to resolve to real
+// secret values - the user keeps the reference in the compose file itself
+// (portable, reusable) instead of having to hand-flatten every one of
+// them into a literal value baked into this one install. Appended after
+// whatever the cloned repo itself shipped (rare, since .env is
+// conventionally gitignored) rather than overwriting it, so a repo-provided
+// default isn't silently lost.
+func applyEnvFileIfProvided(composeApp *ComposeApp, workingDirectory string) error {
+	ext, ok := composeApp.Extensions[common.ComposeExtensionNameXCasaOS].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	envFile, ok := ext["env_file"].(string)
+	if !ok || strings.TrimSpace(envFile) == "" {
+		return nil
+	}
+	f, err := os.OpenFile(filepath.Join(workingDirectory, ".env"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString("\n" + envFile + "\n")
+	return err
 }
 
 func (s *ComposeService) Uninstall(ctx context.Context, composeApp *ComposeApp, deleteConfigFolder bool) error {
