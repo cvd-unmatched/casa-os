@@ -252,7 +252,7 @@ export default {
       return this.appDetailData.screenshot_link?.length > 0
     },
     currentInstallAppTextClass() {
-      return this.currentInstallAppError ? 'has-text-danger' : 'has-text-black'
+      return this.currentInstallAppError ? 'has-text-danger' : 'has-text-white'
     },
     unuseable() {
       if (this.architectures.length === 0 || !this.arch) {
