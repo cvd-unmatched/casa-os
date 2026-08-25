@@ -516,6 +516,16 @@ export default {
       })
     },
     'app:install-error': function (res) {
+      // app:apply-changes-error (a settings-update failure) already pairs
+      // its notice card with a toast, so it's noticeable the instant it
+      // happens rather than only once you scroll down to the notice
+      // carousel - this event (a fresh-install failure) was missing that
+      // same toast entirely. Confirmed live.
+      this.$buefy.toast.open({
+        message: res.Properties.message,
+        duration: 5000,
+        type: 'is-danger',
+      })
       this.transformAppInstallationProgress({
         // Display error messages
         finished: false,
