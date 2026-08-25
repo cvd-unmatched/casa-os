@@ -269,19 +269,23 @@ export default {
               </section>
               <!-- SearchBar End -->
 
-              <!-- core-service Start -->
+              <!-- Apps Start -->
+              <section>
+                <AppSection ref="apps" />
+              </section>
+              <!-- Apps End -->
+
+              <!-- core-service Start - below Apps, not above: this carousel
+                   only actually renders anything once there's a notice
+                   (install error, disk event) or a recommended widget, at
+                   which point it used to push the "Apps" title and its "+"
+                   menu down out of the way every time - confirmed live. -->
               <section>
                 <transition name="fade">
                   <CoreService />
                 </transition>
               </section>
               <!-- core-service End -->
-
-              <!-- Apps Start -->
-              <section>
-                <AppSection ref="apps" />
-              </section>
-              <!-- Apps End -->
 
               <!-- Shortcuts Start -->
               <!-- <section>
