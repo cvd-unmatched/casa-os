@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/common"
@@ -51,6 +52,8 @@ func (s *ComposeService) Install(ctx context.Context, composeApp *ComposeApp) er
 	}
 
 	logger.Info("installing compose app", zap.String("name", composeApp.Name))
+
+	undoTempWorkingDirCorruption(composeApp)
 
 	composeYAMLInterpolated, err := yaml.Marshal(composeApp)
 	if err != nil {
@@ -121,6 +124,52 @@ func (s *ComposeService) Install(ctx context.Context, composeApp *ComposeApp) er
 	}(ctx)
 
 	return nil
+}
+
+// composeGoTempDirMarker is the fixed segment NewComposeAppFromYAML's
+// throwaway working directory always contains (os.MkdirTemp("",
+// "casaos-compose-app-*")).
+const composeGoTempDirMarker = "casaos-compose-app-"
+
+// undoTempWorkingDirCorruption reverses a corruption every build:-based
+// install otherwise hits: NewComposeAppFromYAML parses the submitted
+// compose YAML against a throwaway temp directory just to give
+// compose-go's loader *some* working dir to resolve relative paths
+// against (compose-go's own default assumption - the process's current
+// working dir - is wrong here). But compose-go resolves paths by default,
+// so a relative build.context like "." or "./frontend" gets baked into an
+// *absolute* path pointing inside that temp dir - which is removed again
+// the instant NewComposeAppFromYAML returns, and never had the actual
+// build source in it regardless, since nothing's been fetched yet at
+// parse time. Left alone, that bogus absolute path gets marshaled
+// straight into the persisted docker-compose.yml, and the actual build
+// later fails with "unable to prepare context: path ... not found" -
+// confirmed live. Reversed here, right before the compose file is
+// written to disk, back to the original relative path.
+func undoTempWorkingDirCorruption(composeApp *ComposeApp) {
+	for i := range composeApp.Services {
+		build := composeApp.Services[i].Build
+		if build == nil || build.Context == "" {
+			continue
+		}
+		build.Context = stripComposeGoTempDir(build.Context)
+	}
+}
+
+func stripComposeGoTempDir(context string) string {
+	idx := strings.Index(context, composeGoTempDirMarker)
+	if idx == -1 {
+		return context
+	}
+	rest := context[idx+len(composeGoTempDirMarker):]
+	// rest is "<random>" (context was exactly ".") or
+	// "<random>/<original relative path...>"
+	if slash := strings.IndexAny(rest, "/\\"); slash != -1 {
+		if original := rest[slash+1:]; original != "" {
+			return original
+		}
+	}
+	return "."
 }
 
 // fetchSourceRepoIfNeeded downloads the repo a service's build context

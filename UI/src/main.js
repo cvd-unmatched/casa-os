@@ -40,7 +40,14 @@ const socket = io( {
 	path: '/v2/message_bus/socket.io/',
 });
 
-Vue.use(Buefy)
+// Buefy's own default toast position ('is-top') renders viewport-fixed near
+// the top of the page, which overlaps the "Apps" section title and its "+"
+// menu on the dashboard - bottom-center keeps every toast (error or not)
+// out of the way of page content instead of patching every individual
+// toast.open() call site.
+Vue.use(Buefy, {
+	defaultToastPosition: 'is-bottom',
+})
 Vue.use(VueFullscreen)
 Vue.use(VAnimateCss, { animateCSSPath: '/css/animate.min.css' });
 Vue.use(Vue2TouchEvents)
