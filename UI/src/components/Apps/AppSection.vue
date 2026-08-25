@@ -22,6 +22,9 @@
 				<b-dropdown-item aria-role="menuitem" @click="showInstall(0, 'custom')">
 					{{ $t('Custom Install APP') }}
 				</b-dropdown-item>
+				<b-dropdown-item aria-role="menuitem" @click="installFromGithubPrompt">
+					{{ $t('Install from GitHub') }}
+				</b-dropdown-item>
 				<b-dropdown-item aria-role="menuitem" @click="showExternalLinkPanel">
 					{{ $t('Add external link/APP') }}
 				</b-dropdown-item>
@@ -129,6 +132,9 @@ import YAML from 'yamljs'
 import { nanoid } from 'nanoid'
 import { FOLDER_THEMES } from '@/utils/folderThemes'
 import { resolveOpenAppHost } from '@/utils/openAppHost'
+import { resolveInstallableCompose } from '@/utils/githubInstall'
+
+const githubConfig = 'github_token'
 
 const SYNCTHING_STORE_ID = 74
 
@@ -640,6 +646,53 @@ export default {
 				.map(name => this.appList.find(item => item.name === name))
 				.filter(Boolean)
 				.slice(0, 4)
+		},
+
+		// Entry point for "Install from GitHub" in the "+" menu - unlike the
+		// "Installable from GitHub" widget's scan (limited to repos the
+		// connected account owns or collaborates on), this installs from
+		// any repo by URL, right from the main add-app menu rather than
+		// requiring that widget to be added to the dashboard first.
+		async installFromGithubPrompt () {
+			const res = await this.$api.users.getCustomStorage(githubConfig)
+			const saved = res.data.data
+			if (!saved || !saved.token) {
+				this.$buefy.toast.open({
+					message: this.$t('Connect GitHub in Settings first.'),
+					type: 'is-danger'
+				})
+				return
+			}
+
+			this.$buefy.dialog.prompt({
+				title: this.$t('Install from GitHub'),
+				message: this.$t('Paste a repo URL or owner/repo. It needs a docker-compose.yml (or compose.yml).'),
+				inputAttrs: {
+					placeholder: 'owner/repo'
+				},
+				trapFocus: true,
+				confirmText: this.$t('Install'),
+				cancelText: this.$t('Cancel'),
+				onConfirm: (value) => this.installFromGithub(saved.token, value)
+			})
+		},
+
+		async installFromGithub (token, input) {
+			const { compose, error } = await resolveInstallableCompose(token, input)
+			if (error) {
+				const messages = {
+					invalid_url: this.$t('Paste a GitHub repo URL, like github.com/owner/repo.'),
+					not_found: this.$t('Repo not found - check the URL and that it\'s public.'),
+					unreadable: this.$t('Could not read that repo.'),
+					no_compose: this.$t('No compose file found in that repo.')
+				}
+				this.$buefy.toast.open({
+					message: messages[error] || this.$t('Could not read that repo.'),
+					type: 'is-danger'
+				})
+				return
+			}
+			this.showInstall(0, 'custom', compose)
 		},
 
 		promptNewFolder () {

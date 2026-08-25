@@ -140,6 +140,15 @@ func fetchSourceRepoIfNeeded(composeApp *ComposeApp, workingDirectory string) er
 	if !ok || sourceRepo == "" {
 		return nil
 	}
+	// go-getter's git handler decides clone vs. update by whether dst
+	// already exists - PrepareWorkingDirectory already created it (empty),
+	// which makes it try to update a checkout that was never cloned in the
+	// first place ("fatal: not a git repository"), instead of cloning one.
+	// Removing it first is safe (nothing's been written into it yet at
+	// this point in Install) and makes git clone create it fresh.
+	if err := os.RemoveAll(workingDirectory); err != nil {
+		return err
+	}
 	return downloadHelper.Download(sourceRepo, workingDirectory)
 }
 
