@@ -633,8 +633,16 @@ export default {
           ? 'unless-stopped'
           : composeServicesItem.restart
 
-      // command
-      composeServicesItem.command = this.makeArray(composeServicesItemInput.command)
+      // command - a plain string (e.g. `command: redis-server --save 60 1
+      // --loglevel warning`) means "run this via a shell", but this wizard
+      // always re-emits command as a YAML list, which switches Docker to
+      // exec form - makeArray would wrap the whole string as one element,
+      // and Docker would then look up that entire string as a literal
+      // executable name and fail ("... : not found"). Split it into real
+      // argv tokens instead so exec form still runs the intended command.
+      composeServicesItem.command = typeof composeServicesItemInput.command === 'string'
+        ? this.splitCommandString(composeServicesItemInput.command)
+        : this.makeArray(composeServicesItemInput.command)
 
       // container_name
       composeServicesItem.container_name = composeServicesItemInput?.container_name || ''
@@ -726,6 +734,14 @@ export default {
     makeArray(foo) {
       const newArray = typeof foo == 'string' ? [foo] : foo
       return newArray === undefined ? [] : newArray
+    },
+
+    // Splits a compose command string into exec-form argv tokens
+    // (shell-style whitespace splitting, with basic single/double-quote
+    // support) - see the command: comment in parseComposeItem for why.
+    splitCommandString(command) {
+      const tokens = command.match(/"[^"]*"|'[^']*'|\S+/g) || []
+      return tokens.map(token => token.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1'))
     },
 
     // ****** migration !!! end !!!
