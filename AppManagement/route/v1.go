@@ -109,6 +109,8 @@ func InitV1Router() http.Handler {
 			v1BackupGroup.POST("/import/preview", v1.BackupImportPreview)
 			v1BackupGroup.POST("/import/confirm", v1.BackupImportConfirm)
 		}
+
+		v1Group.GET("/ports", v1.ListPortUsage)
 	}
 
 	return e

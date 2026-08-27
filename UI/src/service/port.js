@@ -25,6 +25,12 @@ const port = {
 		return api.get(`${PREFIX}`, {
 			type: type
 		});
+	},
+
+	// every published port across every installed compose app, and which
+	// app/service publishes it - for the "Ports" settings overview.
+	listUsage() {
+		return api.get('/ports');
 	}
 }
 
