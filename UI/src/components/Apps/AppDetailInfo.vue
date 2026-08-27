@@ -1,6 +1,5 @@
 <script>
 import VMdEditor from '@kangc/v-md-editor'
-import { Swiper, SwiperSlide } from 'vue-awesome-swiper'
 import YAML from 'yaml'
 import business_OpenThirdApp from '@/mixins/app/Business_OpenThirdApp'
 import business_ShowNewAppTag from '@/mixins/app/Business_ShowNewAppTag'
@@ -9,7 +8,7 @@ import app from '@/App.vue'
 
 export default {
   name: 'AppDetailInfo',
-  components: { VMdEditor, Swiper, SwiperSlide },
+  components: { VMdEditor },
   mixins: [business_ShowNewAppTag, business_OpenThirdApp, commonI18n],
   props: {
     appDetailData: {
@@ -47,7 +46,6 @@ export default {
       disPrev: false,
       disNext: false,
       slidesPerView: 3,
-      swiper: null,
       swiperOptions: {
         loop: false,
         autoplay: true,
@@ -73,6 +71,9 @@ export default {
           breakpoint: (swiper) => {
             this.slidesPerView = swiper.slidesPerView
           },
+          observerUpdate: () => {
+            this.updateSwiper()
+          },
         },
       },
     }
@@ -92,12 +93,27 @@ export default {
       return !this.appDetailData.architectures?.includes(this.arch)
     },
   },
+  watch: {
+    showDetailSwiper: {
+      immediate: true,
+      handler(val) {
+        if (!val) {
+          return
+        }
+        this.$nextTick(() => {
+          const swiperEl = this.$refs.detailSwiper
+          if (!swiperEl || swiperEl.swiper) {
+            return
+          }
+          Object.assign(swiperEl, this.swiperOptions)
+          swiperEl.initialize()
+        })
+      },
+    },
+  },
   methods: {
     updateSwiper() {
-      this.swiper.slideTo(0, 0, false)
-    },
-    handleSwiperReadied(swiper) {
-      this.swiper = swiper
+      this.$refs.detailSwiper?.swiper?.slideTo(0, 0, false)
     },
     getCateIcon(name) {
       const tempO = this.cateMenu.find(item => item.name === name) || { font: 'apps' }
@@ -273,13 +289,12 @@ export default {
 
       <!-- App Info Slider Start -->
       <div v-if="showDetailSwiper" class="is-relative">
-        <Swiper
-          :options="swiperOptions"
+        <swiper-container
+          ref="detailSwiper"
+          init="false"
           class="swiper swiper-responsive-breakpoints"
-          @observer-update="updateSwiper"
-          @ready="handleSwiperReadied"
         >
-          <SwiperSlide v-for="item in appDetailData.screenshot_link" :key="`sc${item}`">
+          <swiper-slide v-for="item in appDetailData.screenshot_link" :key="`sc${item}`">
             <div class="gap">
               <b-image
                 :src="item"
@@ -290,8 +305,8 @@ export default {
                 @click.native="zoomScreenshot(item)"
               />
             </div>
-          </SwiperSlide>
-        </Swiper>
+          </swiper-slide>
+        </swiper-container>
         <div class="swiper-button-prev" />
         <div class="swiper-button-next" />
       </div>
