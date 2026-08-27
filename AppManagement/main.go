@@ -198,6 +198,7 @@ func main() {
 			"/v1/app-categories",
 			"/v1/autoupdate",
 			"/v1/backup",
+			"/v1/ports",
 			route.V1DocPath,
 			route.V2APIPath,
 			route.V2DocPath,
