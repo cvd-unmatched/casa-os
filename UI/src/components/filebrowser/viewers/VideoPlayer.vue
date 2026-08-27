@@ -49,7 +49,7 @@
 import { mixin } from "@/mixins/mixin";
 import Aplayer from 'vue-aplayer'
 import Artplayer from 'artplayer';
-import * as mm from 'music-metadata-browser';
+import { parseWebStream } from 'music-metadata';
 Aplayer.disableVersionBadge = true
 export default {
 	mixins: [mixin],
@@ -105,7 +105,8 @@ export default {
 			if (this.isAudio) {
 				(async () => {
 					const fileUrl = this.getFileUrl(this.item);
-					const metadata = await mm.fetchFromUrl(fileUrl);
+					const response = await fetch(fileUrl);
+					const metadata = await parseWebStream(response.body, response.headers.get('content-type'));
 					if (metadata.common.picture) {
 						const blob = new Blob([metadata.common.picture[0].data], { type: metadata.common.picture[0].format });
 						const url = URL.createObjectURL(blob);
