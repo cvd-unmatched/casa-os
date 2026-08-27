@@ -1,5 +1,4 @@
 <script>
-import { Swiper, SwiperSlide } from 'vue-awesome-swiper'
 import sortBy from 'lodash/sortBy'
 import noticeBlock from '@/components/noticBlock/noticeBlock'
 import { mixin } from '@/mixins/mixin'
@@ -12,7 +11,7 @@ import { ice_i18n } from '@/mixins/base/common-i18n'
 
 export default {
   name: 'CoreService',
-  components: { SmartBlock, SyncBlock, NoticeBlock: noticeBlock, Swiper, SwiperSlide },
+  components: { SmartBlock, SyncBlock, NoticeBlock: noticeBlock },
   mixins: [mixin, Business_ShowNewAppTag],
   inject: ['homeShowFiles'],
   data() {
@@ -78,7 +77,7 @@ export default {
         }
         // skip new notice card
         this.$nextTick(() => {
-          this.$refs.mySwiper.$swiper.slideTo(val - 1, 1000, true)
+          this.$refs.mySwiper?.swiper?.slideTo(val - 1, 1000, true)
         })
       },
     },
@@ -89,6 +88,14 @@ export default {
   },
   mounted() {
     this.WSHub = this.initMessageBus()
+    this.$nextTick(() => {
+      const swiperEl = this.$refs.mySwiper
+      if (!swiperEl || swiperEl.swiper) {
+        return
+      }
+      Object.assign(swiperEl, this.swiperOptions)
+      swiperEl.initialize()
+    })
   },
   beforeUnmount() {
     for (const key in this.WSHub) {
@@ -574,32 +581,28 @@ export default {
 </script>
 
 <template>
-  <Swiper ref="mySwiper" :options="swiperOptions">
-    <SwiperSlide v-for="(noticeCard, key) in noticesData" :key="key" :class="{ _singleWidth: showFullCard }">
-      <NoticeBlock :notice-data="noticeCard" :notice-type="key" @delete-notice="refreshNotice" />
-    </SwiperSlide>
-    <SwiperSlide v-if="recommendShow">
-      <SyncBlock />
-    </SwiperSlide>
-    <SwiperSlide v-if="recommendShow">
-      <SmartBlock />
-    </SwiperSlide>
-    <template #pagination>
-      <div v-show="recommendShow || noticeLength !== 0" class="swiper-pagination" />
-    </template>
-    <template #button-prev>
-      <img
-        :src="require('@/assets/img/widgets/swiper-left.svg')" alt="prev"
-        class="swiper-button-prev"
-      >
-    </template>
-    <template #button-next>
-      <img
-        :src="require('@/assets/img/widgets/swiper-right.svg')" alt="next"
-        class="swiper-button-next"
-      >
-    </template>
-  </Swiper>
+  <div class="swiper-container">
+    <swiper-container ref="mySwiper" init="false">
+      <swiper-slide v-for="(noticeCard, key) in noticesData" :key="key" :class="{ _singleWidth: showFullCard }">
+        <NoticeBlock :notice-data="noticeCard" :notice-type="key" @delete-notice="refreshNotice" />
+      </swiper-slide>
+      <swiper-slide v-if="recommendShow">
+        <SyncBlock />
+      </swiper-slide>
+      <swiper-slide v-if="recommendShow">
+        <SmartBlock />
+      </swiper-slide>
+    </swiper-container>
+    <div v-show="recommendShow || noticeLength !== 0" class="swiper-pagination" />
+    <img
+      :src="require('@/assets/img/widgets/swiper-left.svg')" alt="prev"
+      class="swiper-button-prev"
+    >
+    <img
+      :src="require('@/assets/img/widgets/swiper-right.svg')" alt="next"
+      class="swiper-button-next"
+    >
+  </div>
 </template>
 
 <style lang="scss" scoped>

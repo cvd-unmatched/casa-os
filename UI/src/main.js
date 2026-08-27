@@ -1,4 +1,6 @@
 import 'intersection-observer'
+import { register as registerSwiperElements } from 'swiper/element/bundle'
+import 'swiper/css/bundle'
 import Vue from 'vue'
 import App from '@/App.vue'
 import router from '@/router'
@@ -58,6 +60,10 @@ Vue.use(VueDOMPurifyHTML, {
 		ALLOWED_ATTR: ['target', 'href']
 	}
 });
+
+registerSwiperElements()
+// swiper-container/swiper-slide are web components, not Vue components
+Vue.config.ignoredElements = [/^swiper-/]
 
 Vue.config.productionTip = false
 // Vue normally just console.errors a component error and carries on with a

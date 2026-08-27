@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "casaos-ui-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "UI", "run", "dev"],
+      "port": 8080
+    }
+  ]
+}

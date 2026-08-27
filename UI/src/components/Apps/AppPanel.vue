@@ -8,7 +8,6 @@ import isNull from 'lodash/isNull'
 import orderBy from 'lodash/orderBy'
 import debounce from 'lodash/debounce'
 import FileSaver from 'file-saver'
-import { Swiper, SwiperSlide } from 'vue-awesome-swiper'
 import { ValidationObserver, ValidationProvider } from 'vee-validate'
 import { parse } from 'yaml'
 import { vOnClickOutside } from '@vueuse/components'
@@ -57,8 +56,6 @@ export default {
     AppDetailInfo,
     AppSideBar,
     LottieAnimation,
-    Swiper,
-    SwiperSlide,
     AppsInstallationLocation,
     ComposeConfig,
     ValidationObserver,
@@ -486,6 +483,14 @@ export default {
             // port: main_app_info.apps[id].port_map,
             // index: main_app_info.apps[id].index,
           }
+        })
+        this.$nextTick(() => {
+          const swiperEl = this.$refs.featureSwiper
+          if (!swiperEl || swiperEl.swiper) {
+            return
+          }
+          Object.assign(swiperEl, this.featureSwiperOptions)
+          swiperEl.initialize()
         })
       }
       catch (error) {
@@ -1309,8 +1314,8 @@ export default {
             </h3>
             <!-- Featured Slider Start -->
             <div class="is-relative featured-app b-line">
-              <Swiper ref="featureSwiper" :options="featureSwiperOptions" class="swiper">
-                <SwiperSlide
+              <swiper-container ref="featureSwiper" init="false" class="swiper">
+                <swiper-slide
                   v-for="(item, index) in recommendList"
                   :key="index + item.title + item.id"
                   class="pb-5"
@@ -1374,8 +1379,8 @@ export default {
                       </b-button>
                     </div>
                   </div>
-                </SwiperSlide>
-              </Swiper>
+                </swiper-slide>
+              </swiper-container>
               <div class="swiper-button-prev" @click="$messageBus('appstore_slide')" />
               <div class="swiper-button-next" @click="$messageBus('appstore_slide')" />
             </div>
