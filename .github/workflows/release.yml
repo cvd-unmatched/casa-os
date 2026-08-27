@@ -19,11 +19,11 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.0.6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -32,7 +32,7 @@ jobs:
         working-directory: UI
       - run: pnpm run build
         working-directory: UI
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: www
           path: UI/build/sysroot/var/lib/casaos/www
@@ -79,8 +79,8 @@ jobs:
       GOSUMDB: "off"
       GOTOOLCHAIN: local
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -120,7 +120,7 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           go build -ldflags "-s -w -X main.commit=${{ github.sha }} -X github.com/IceWhaleTech/CasaOS/common.ForkVersion=${{ github.ref_name }}" -o casa main.go
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: casa-linux-${{ matrix.arch }}
           path: casa
@@ -138,8 +138,8 @@ jobs:
       GOSUMDB: "off"
       GOTOOLCHAIN: local
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: AppManagement/go.mod
           # without this, setup-go's cache auto-detection falls back to
@@ -156,7 +156,7 @@ jobs:
         run: |
           go build -ldflags "-s -w -X main.commit=${{ github.sha }} -X main.forkVersion=${{ github.ref_name }}" -o casaos-app-management main.go
         working-directory: AppManagement
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: app-management-linux-${{ matrix.arch }}
           path: AppManagement/casaos-app-management
@@ -165,10 +165,10 @@ jobs:
     needs: [build-ui, build-backend, build-app-management]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Package tarballs
@@ -204,7 +204,7 @@ jobs:
               echo "## Initial release"
             fi
           } > CHANGELOG_BODY.md
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: |
             casaos-linux-amd64.tar.gz
