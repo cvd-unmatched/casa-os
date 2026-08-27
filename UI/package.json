@@ -7,7 +7,8 @@
     "build": "node message_bus.build.js && vue-cli-service build --dest ./build/sysroot/var/lib/casaos/www/ --mode production",
     "lint": "vue-cli-service lint",
     "build:messagebus": "node message_bus.build.js",
-    "test": "vitest"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "installConfig": {
     "hoistingLimits": "workspaces"
@@ -145,6 +146,7 @@
     "tailwindcss": "^3.4.15",
     "terser-webpack-plugin": "5.3.10",
     "typescript": "^5.7.2",
+    "vitest": "^1.6.0",
     "vue-template-compiler": "^2.7.14",
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^5.1.0",
