@@ -1,0 +1,84 @@
+name: CI
+
+# Runs on every push/PR against main, so a regression is caught immediately -
+# unlike release.yml, which only builds (never tests) and only runs when a
+# release tag is pushed, meaning an ordinary commit to main previously had
+# zero automated verification of any kind.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-app-management:
+    runs-on: ubuntu-latest
+    env:
+      GOSUMDB: "off"
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: AppManagement/go.mod
+          cache-dependency-path: AppManagement/go.sum
+      - run: go generate ./...
+        working-directory: AppManagement
+      - run: go build ./...
+        working-directory: AppManagement
+      - run: go test ./...
+        working-directory: AppManagement
+
+  test-backend:
+    # Needs the same CGO + libwebp setup release.yml's build-backend job
+    # uses - the service package (icon upload) depends on chai2010/webp, so
+    # even a test that never touches icon code still needs this to build at
+    # all. See release.yml's own comments for why each of these steps
+    # exists (GOSUMDB off, GOTOOLCHAIN local, the apt mirror workaround).
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    env:
+      GOSUMDB: "off"
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Install libwebp-dev
+        run: |
+          cat <<'SOURCES' | sudo tee /etc/apt/sources.list.d/reliable-only.list
+          deb http://archive.ubuntu.com/ubuntu noble main universe restricted multiverse
+          deb http://archive.ubuntu.com/ubuntu noble-updates main universe restricted multiverse
+          deb http://security.ubuntu.com/ubuntu noble-security main universe restricted multiverse
+          SOURCES
+          sudo apt-get -o Dir::Etc::sourcelist="sources.list.d/reliable-only.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" update
+          sudo apt-get install -y --no-install-recommends libwebp-dev
+      - run: go generate ./...
+      - env:
+          CGO_ENABLED: "1"
+        run: go build ./...
+      - env:
+          CGO_ENABLED: "1"
+        run: go test ./...
+
+  test-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: UI/pnpm-lock.yaml
+      - run: pnpm install
+        working-directory: UI
+      - run: pnpm run test
+        working-directory: UI
+      - run: pnpm run build
+        working-directory: UI
