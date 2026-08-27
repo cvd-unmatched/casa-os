@@ -16,6 +16,25 @@
         position: absolute;
         right: 2rem;
         top: 2rem;
+
+        // Bulma's default .delete is a near-black translucent circle
+        // (rgba(10, 10, 10, 0.2)) meant for a light background - sitting on
+        // this fork's own dark, translucent modal-card background
+        // ($backDropColor) the two blend together, leaving barely any
+        // visible button. Confirmed live.
+        .delete {
+            background-color: rgba(255, 255, 255, 0.16);
+
+            &::before,
+            &::after {
+                background-color: #fff;
+            }
+
+            &:hover,
+            &:focus {
+                background-color: rgba(255, 255, 255, 0.28);
+            }
+        }
     }
 
     .modal-close-container {
