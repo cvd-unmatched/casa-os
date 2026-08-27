@@ -2,6 +2,7 @@
 import AccountPanel from './account/AccountPanel.vue'
 import TerminalPanel from './logsAndTerminal/TerminalPanel.vue'
 import PortPanel from './settings/PortPanel.vue'
+import PortsModal from './settings/PortsModal.vue'
 import UpdateModal from './settings/UpdateModal.vue'
 import IconStorageModal from './settings/IconStorageModal.vue'
 import WebhooksModal from './settings/WebhooksModal.vue'
@@ -267,6 +268,20 @@ export default {
         },
       })
     },
+
+    showPortsModal() {
+      this.$refs.settingsDrop.toggle()
+      this.$buefy.modal.open({
+        parent: this,
+        component: PortsModal,
+        hasModalCard: true,
+        trapFocus: true,
+        canCancel: ['escape', 'outside'],
+        scroll: 'keep',
+        animation: 'zoom-in',
+      })
+    },
+
     showChangeWallpaperModal() {
       this.$EventBus.$emit(events.SHOW_CHANGE_WALLPAPER_MODAL)
       this.$refs.settingsDrop.toggle()
@@ -1145,6 +1160,23 @@ export default {
             </div>
           </div>
           <!-- App Links End -->
+
+          <!-- Ports Start -->
+          <div
+            v-if="isSettingVisible('ports')"
+            class="is-flex is-align-items-center mb-1 _is-large _box hover-effect _is-radius pr-2 mr-4 ml-4"
+          >
+            <div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+              <b-icon class="mr-1 ml-2" icon="port-outline" pack="casa" size="is-20" />
+              {{ $t("Ports") }}
+            </div>
+            <div class="ml-2">
+              <b-button rounded size="is-small" type="is-dark" @click="showPortsModal">
+                {{ $t("Open") }}
+              </b-button>
+            </div>
+          </div>
+          <!-- Ports End -->
 
           <!-- Convert Icons to WebP Start -->
           <div

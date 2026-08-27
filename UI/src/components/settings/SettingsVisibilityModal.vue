@@ -11,6 +11,7 @@ export const SETTINGS_CATALOG = [
 	{ key: 'webhooks', label: 'Webhooks' },
 	{ key: 'backup', label: 'Backup & Restore' },
 	{ key: 'open_app_host', label: 'App Links' },
+	{ key: 'ports', label: 'Ports' },
 	{ key: 'convert_icons', label: 'Convert all icons to local WebP' },
 	{ key: 'github', label: 'GitHub' },
 	{ key: 'show_other_docker', label: 'Show other Docker container app(s)' },
