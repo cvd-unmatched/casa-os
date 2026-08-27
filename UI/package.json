@@ -64,7 +64,7 @@
     "markdown-it": "^13.0.1",
     "marked": "^4.3.0",
     "mime": "^3.0.0",
-    "music-metadata-browser": "^2.5.10",
+    "music-metadata": "^11.15.0",
     "nanoid": "^4.0.2",
     "qs": "^6.11.2",
     "remove": "^0.1.5",
