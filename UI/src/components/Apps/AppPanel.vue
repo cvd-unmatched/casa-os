@@ -1095,6 +1095,14 @@ export default {
 
       if (!resData.finished) {
         this.currentInstallAppError = !resData.success
+        if (!resData.success) {
+          // keep whatever the user submitted so going Back to the form
+          // re-opens with their edits instead of the original values -
+          // ComposeConfig gets destroyed/recreated by the currentSlide
+          // v-if, and it initializes from this prop, not from
+          // dockerComposeCommands (which only reflects live in-progress edits).
+          this.dockerComposeConfig = this.dockerComposeCommands
+        }
         if (resData.success) {
           this.currentInstallAppType = resData.type
 
