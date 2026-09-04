@@ -7,7 +7,7 @@
 			</div>
 			<h3 class="title is-3">{{ serviceName || appName }}</h3>
 			<div class="is-flex-grow-1">
-				<b-tabs :animated="false" @input="onInput">
+				<b-tabs :value="defaultTab" :animated="false" @input="onInput">
 					<b-tab-item :label="$t('Terminal')" value="terminal">
 						<terminal-card ref="terminal" :initWsUrl="wsUrl"></terminal-card>
 					</b-tab-item>
@@ -44,6 +44,10 @@ export default {
 		appid: String,
 		appName: String,
 		serviceName: String,
+		defaultTab: {
+			type: String,
+			default: 'terminal',
+		},
 	},
 	mounted() {
 		this.getLogs();
