@@ -8,6 +8,7 @@ import business_ShowNewAppTag from '@/mixins/app/Business_ShowNewAppTag'
 import business_OpenThirdApp from '@/mixins/app/Business_OpenThirdApp'
 import business_LinkApp from '@/mixins/app/Business_LinkApp'
 import tipEditorModal from '@/components/Apps/TipEditorModal.vue'
+import AppTerminalPanel from '@/components/Apps/AppTerminalPanel.vue'
 import commonI18n, { ice_i18n } from '@/mixins/base/common-i18n'
 
 export default {
@@ -389,6 +390,42 @@ export default {
       this.$messageBus('apps_setting', this.item.name)
       this.$refs.dro.isActive = false
       this.$emit('configApp', this.item, this.isV2App)
+    },
+
+    /**
+     * @description: Open the terminal/logs modal directly to its Logs tab,
+     * without going through Setting first
+     * @return {*} void
+     */
+    showLogs() {
+      this.$refs.dro.isActive = false
+      this.$openAPI.appManagement.compose
+        .composeAppContainers(this.item.name)
+        .then((res) => {
+          if (res.status == 200) {
+            const containers = res.data.data.containers
+            const serviceName = Object.keys(containers)[0]
+            this.$buefy.modal.open({
+              parent: this,
+              component: AppTerminalPanel,
+              hasModalCard: true,
+              customClass: 'terminal-modal',
+              trapFocus: true,
+              canCancel: [],
+              scroll: 'keep',
+              animation: 'zoom-in',
+              props: {
+                appid: containers[serviceName]?.ID,
+                appName: this.item.name,
+                serviceName,
+                defaultTab: 'logs',
+              },
+            })
+          }
+        })
+        .catch((err) => {
+          console.log('$openAPI.appManagement.compose.composeAppContainers', err.response)
+        })
     },
 
     /**
@@ -791,6 +828,12 @@ export default {
             {{
               $t('Setting')
             }}
+          </b-button>
+          <b-button
+            v-if="(isV2App || isV1App || isContainerApp) && item.status === 'running'"
+            expanded type="is-text" @click="showLogs()"
+          >
+            {{ $t('Logging') }}
           </b-button>
 
           <b-button v-if="(isV2App || isV1App || isContainerApp) && publicUrl" expanded type="is-text" @click="openPublicUrl">

@@ -200,6 +200,7 @@
   "Terminal & Logs": "Terminal and Logs",
   "Terminal": "Terminal",
   "Logs": "Logs",
+  "Logging": "Logging",
   "Please check if the username and port are correct, and make sure that ssh server is installed.": "Please check if the username and port are correct. Make sure the SSH server is installed.",
   "Widgets Settings": "Widget settings",
   "Time": "Time",
