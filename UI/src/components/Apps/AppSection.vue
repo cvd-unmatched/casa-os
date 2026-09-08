@@ -295,11 +295,11 @@ export default {
 		async getList () {
 			try {
 				const orgAppList = await this.$openAPI.appGrid.getAppGrid().then(res => res.data.data || [])
-				const openAppHost = await resolveOpenAppHost(this.$baseIp)
+				const openAppHost = await resolveOpenAppHost()
 				let orgOldAppList = [],
 					orgNewAppList = []
 				orgAppList.forEach(item => {
-					item.hostname = item.hostname || openAppHost
+					item.hostname = openAppHost || item.hostname || this.$baseIp
 					// Container app does not have icon.
 					item.icon = item.icon || require(`@/assets/img/app/default.svg`)
 					if (item.app_type === 'v1app' || item.app_type === 'container') {

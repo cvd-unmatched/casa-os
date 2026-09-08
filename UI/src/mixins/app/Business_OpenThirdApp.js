@@ -14,10 +14,10 @@ export default {
 		openAppToNewWindow(appInfo) {
 			this.hasNewTag(appInfo.name) ? this.firstOpenThirdApp(appInfo) : this.openThirdApp(appInfo, true);
 		},
-		openThirdApp(appInfo, isNewWindows) {
+		async openThirdApp(appInfo, isNewWindows) {
 			this.$messageBus('apps_open', appInfo.name);
 			if (appInfo.hostname !== "" || appInfo.port !== "" || appInfo.index !== "") {
-				const hostIp = appInfo.hostname || this.$baseIp
+				const hostIp = await resolveOpenAppHost() || appInfo.hostname || this.$baseIp
 				const scheme = appInfo.scheme || 'http'
 				const port = appInfo.port ? `:${appInfo.port}` : ''
 				const url = `${scheme}://${hostIp}${port}${appInfo.index}`
@@ -46,7 +46,7 @@ export default {
 					"id": appInfo.id,
 					"name": appInfo.id,
 					scheme: containerInfoV2.scheme,
-					hostname: containerInfoV2.hostname || await resolveOpenAppHost(this.$baseIp),
+					hostname: await resolveOpenAppHost() || containerInfoV2.hostname || this.$baseIp,
 					port: containerInfoV2.port_map,
 					index: containerInfoV2.index,
 					image: allinfo.compose.services[appInfo.id].image,

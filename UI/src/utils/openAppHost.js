@@ -23,25 +23,27 @@ function fetchPreferenceAndAccessIps() {
 }
 
 /**
- * @description Resolves the host app links should use. Falls back to
- * fallbackHost (the current browser hostname) whenever no preference is
- * set, the fetch failed, or the box doesn't actually have the requested
- * kind of address.
- * @param {string} fallbackHost
- * @return {Promise<string>}
+ * @description Resolves the host app links should use per the user's App
+ * Links preference. Returns null when no preference is set, the fetch
+ * failed, or the box doesn't actually have the requested kind of address -
+ * callers should fall back to whatever they'd otherwise use (an app's own
+ * configured hostname, then the current browser hostname). A preference the
+ * user actively chose is meant to apply across every app, so it must be
+ * checked before any per-app hostname, not after.
+ * @return {Promise<string|null>}
  */
-export function resolveOpenAppHost(fallbackHost) {
+export function resolveOpenAppHost() {
 	if (!cachedResolution)
 		cachedResolution = fetchPreferenceAndAccessIps()
 
 	return cachedResolution.then(([preference, accessIps]) => {
 		if (!preference || !accessIps)
-			return fallbackHost
+			return null
 		if (preference.mode === 'lan' && accessIps.lan_ips && accessIps.lan_ips.length)
 			return accessIps.lan_ips[0]
 		if (preference.mode === 'tailscale' && accessIps.tailscale_ip)
 			return accessIps.tailscale_ip
-		return fallbackHost
+		return null
 	})
 }
 
