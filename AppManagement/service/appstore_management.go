@@ -9,11 +9,13 @@ import (
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/codegen"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/common"
+	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/autoupdate"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/config"
 	"github.com/IceWhaleTech/CasaOS-AppManagement/pkg/docker"
 	"github.com/IceWhaleTech/CasaOS-Common/utils"
 	"github.com/IceWhaleTech/CasaOS-Common/utils/file"
 	"github.com/IceWhaleTech/CasaOS-Common/utils/logger"
+	"github.com/Masterminds/semver/v3"
 	"github.com/bluele/gcache"
 	"github.com/docker/docker/client"
 	"github.com/samber/lo"
@@ -584,7 +586,26 @@ func (a *AppStoreManagement) IsUpdateAvailableWith(composeApp *ComposeApp, store
 		return !match, nil
 	}
 	storeTag, err := storeComposeApp.MainTag()
-	return currentTag != storeTag, err
+	if err != nil {
+		return false, err
+	}
+	if storeTag == currentTag {
+		return false, nil
+	}
+	// A plain inequality check here previously called any store tag that
+	// merely differed from the current one an "update," direction unchecked
+	// - which reported Home Assistant's catalog-pinned 2024.4.4 as an
+	// "update" over an already-installed 2026.9.2, and clicking it would
+	// have genuinely downgraded the container. Compare properly instead,
+	// the same way pkg/autoupdate's registry-based check already does.
+	currentVersion, err := semver.NewVersion(currentTag)
+	if err != nil {
+		// currentTag isn't a real version (latest, main, a sha, ...) - no
+		// valid basis to say the store's tag is "newer" than that.
+		return false, nil
+	}
+	newest, ok := autoupdate.NewestTag([]string{currentTag, storeTag}, currentVersion.Prerelease() != "")
+	return ok && newest == storeTag, nil
 }
 
 func (a *AppStoreManagement) IsUpdating(appID string) bool {

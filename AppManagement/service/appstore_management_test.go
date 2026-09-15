@@ -129,9 +129,29 @@ func TestIsUpgradable(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, !upgradable)
 
-	storeComposeApp.Services[0].Image = storeMainAppImage + ":test"
+	// a genuinely newer version is upgradable
+	storeComposeApp.Services[0].Image = storeMainAppImage + ":1.23.2"
 
 	upgradable, err = appStoreManagement.IsUpdateAvailableWith(localComposeApp, storeComposeApp)
 	assert.NilError(t, err)
 	assert.Assert(t, upgradable)
+
+	// an older store tag must never be reported as an "update" just because
+	// it differs from what's installed - this is the exact bug that once
+	// suggested Home Assistant's catalog-pinned 2024.4.4 as an "update"
+	// over an already-installed 2026.9.2, which would have downgraded the
+	// running container had the user clicked it.
+	storeComposeApp.Services[0].Image = storeMainAppImage + ":1.22.0"
+
+	upgradable, err = appStoreManagement.IsUpdateAvailableWith(localComposeApp, storeComposeApp)
+	assert.NilError(t, err)
+	assert.Assert(t, !upgradable)
+
+	// a store tag that isn't a comparable version at all can't be proven
+	// newer, so it must not be reported as an update either
+	storeComposeApp.Services[0].Image = storeMainAppImage + ":test"
+
+	upgradable, err = appStoreManagement.IsUpdateAvailableWith(localComposeApp, storeComposeApp)
+	assert.NilError(t, err)
+	assert.Assert(t, !upgradable)
 }
