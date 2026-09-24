@@ -17,7 +17,7 @@ export default {
     CTooltip: cTooltip,
   },
   mixins: [business_ShowNewAppTag, business_OpenThirdApp, business_LinkApp, commonI18n],
-  inject: ['homeShowFiles', 'openAppStore', 'getFolders', 'moveAppToFolder', 'removeAppFromFolder', 'createFolder', 'getPublicUrl', 'setPublicUrl'],
+  inject: ['homeShowFiles', 'openAppStore', 'getFolders', 'moveAppToFolder', 'removeAppFromFolder', 'createFolder', 'getPublicUrl', 'setPublicUrl', 'hideApp'],
   props: {
     item: {
       type: Object,
@@ -386,6 +386,11 @@ export default {
      * @description: Emit the event that the app has been updated with custom_id
      * @return {*} void
      */
+    hideThisApp() {
+      this.$refs.dro.isActive = false
+      this.hideApp(this.item.name)
+    },
+
     configApp() {
       this.$messageBus('apps_setting', this.item.name)
       this.$refs.dro.isActive = false
@@ -900,6 +905,10 @@ export default {
               </div>
             </div>
           </div>
+
+          <b-button v-if="isV2App || isV1App || isContainerApp || isLinkApp" expanded type="is-text" @click="hideThisApp">
+            {{ $t('Hide') }}
+          </b-button>
 
           <div class="folder-menu">
             <b-button expanded type="is-text" @click="promptMoveToNewFolder">

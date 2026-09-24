@@ -31,6 +31,9 @@
 				<b-dropdown-item aria-role="menuitem" @click="promptNewFolder">
 					{{ $t('New Folder') }}
 				</b-dropdown-item>
+				<b-dropdown-item v-if="hiddenApps.length" aria-role="menuitem" @click="showHiddenApps">
+					{{ $t('Hidden apps') }} ({{ hiddenApps.length }})
+				</b-dropdown-item>
 			</b-dropdown>
 		</div>
 		<!-- Title Bar End -->
@@ -118,6 +121,7 @@ import AppFolderCard from './AppFolderCard.vue'
 import AppFolderPanel from './AppFolderPanel.vue'
 import AppPanel from './AppPanel.vue'
 import ExternalLinkPanel from '@/components/Apps/ExternalLinkPanel'
+import HiddenAppsModal from '@/components/Apps/HiddenAppsModal.vue'
 import AppSectionTitleTip from './AppSectionTitleTip.vue'
 import draggable from 'vuedraggable'
 import xor from 'lodash/xor'
@@ -166,6 +170,7 @@ const orderConfig = 'app_order'
 const groupsConfig = 'app_groups'
 const displayOrderConfig = 'app_display_order'
 const publicUrlsConfig = 'app_public_urls'
+const hiddenAppsConfig = 'app_hidden'
 
 const FOLDER_COLORS = ['#5B8DEF', '#61C454', '#F2994A', '#EB5757', '#9B51E0', '#2D9CDB', '#F2C94C', '#56CCF2']
 
@@ -191,6 +196,11 @@ export default {
 			displayList: [],
 			displayOrder: [],
 			publicUrls: {},
+			// app names the user hid from the grid - kept out of appList's
+			// display but not out of it entirely, see rebuildDisplayList()
+			hiddenApps: [],
+			// every app the grid knows about, hidden or not - for the unhide list
+			knownApps: [],
 			// consecutive-miss counter per app name, keyed by name - see pruneMissingApps()
 			missingAppStreak: {}
 		}
@@ -206,7 +216,7 @@ export default {
 		return {
 			openAppStore: this.showInstall,
 			getFolders: () => this.groups,
-			getAppList: () => this.appList,
+			getAppList: () => this.appList.filter(item => !this.hiddenApps.includes(item.name)),
 			getFolderColors: () => FOLDER_COLORS,
 			getFolderThemes: () => FOLDER_THEMES,
 			createFolder: this.createFolder,
@@ -217,7 +227,8 @@ export default {
 			moveAppToFolder: this.moveAppToFolder,
 			removeAppFromFolder: this.removeAppFromFolder,
 			getPublicUrl: appName => this.publicUrls[appName] || '',
-			setPublicUrl: this.setPublicUrl
+			setPublicUrl: this.setPublicUrl,
+			hideApp: this.hideApp
 		}
 	},
 	computed: {
@@ -238,7 +249,7 @@ export default {
 	},
 	created () {
 		this.getPublicUrls()
-		this.getGroups().then(() => this.getList())
+		Promise.all([this.getGroups(), this.getHiddenApps()]).then(() => this.getList())
 		this.draggable = this.isMobile() ? '' : '.handle'
 		this.$EventBus.$on(events.OPEN_APP_STORE_AND_GOTO_SYNCTHING, () => {
 			this.showInstall(SYNCTHING_STORE_ID)
@@ -308,7 +319,7 @@ export default {
 						orgNewAppList.push(item)
 					}
 				})
-				this.oldAppList = orgOldAppList
+				this.oldAppList = orgOldAppList.filter(item => !this.hiddenApps.includes(item.name))
 
 				let listLinkApp = await this.getLinkAppList()
 				listLinkApp.forEach(item => {
@@ -319,6 +330,7 @@ export default {
 				})
 				// all app list
 				let casaAppList = concat(builtInApplications, orgNewAppList, listLinkApp)
+				this.knownApps = concat(orgOldAppList, casaAppList)
 				// get app sort info.
 				let lateSortList = await this.$api.users
 					.getCustomStorage(orderConfig)
@@ -442,6 +454,55 @@ export default {
 			this.$api.users.setCustomStorage(publicUrlsConfig, { data: this.publicUrls })
 		},
 
+		/**
+		 * @description: Apps the user hid from the dashboard (not uninstalled
+		 * or stopped, just not shown) - stored per user like folders/order.
+		 */
+		async getHiddenApps () {
+			this.hiddenApps = await this.$api.users
+				.getCustomStorage(hiddenAppsConfig)
+				.then(res => res.data.data.data || [])
+				.catch(() => [])
+		},
+
+		saveHiddenApps () {
+			this.$api.users.setCustomStorage(hiddenAppsConfig, { data: this.hiddenApps })
+		},
+
+		hideApp (appName) {
+			if (this.hiddenApps.includes(appName)) return
+			this.hiddenApps = [...this.hiddenApps, appName]
+			this.saveHiddenApps()
+			this.getList()
+			this.$buefy.toast.open({
+				message: this.$t('App hidden. Bring it back from the + menu under Hidden apps.'),
+				type: 'is-info'
+			})
+		},
+
+		unhideApp (appName) {
+			this.hiddenApps = this.hiddenApps.filter(name => name !== appName)
+			this.saveHiddenApps()
+			this.getList()
+		},
+
+		showHiddenApps () {
+			this.$buefy.modal.open({
+				parent: this,
+				component: HiddenAppsModal,
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape', 'outside'],
+				props: {
+					apps: this.hiddenApps.map(name => {
+						const app = this.knownApps.find(item => item.name === name)
+						return { name, title: app ? ice_i18n(app.title) || name : name, icon: app ? app.icon : '' }
+					}),
+					unhide: this.unhideApp
+				}
+			})
+		},
+
 		setPublicUrl (appName, url) {
 			const trimmed = (url || '').trim()
 			if (trimmed) this.$set(this.publicUrls, appName, trimmed)
@@ -504,12 +565,12 @@ export default {
 			const grouped = new Set()
 			this.groups.forEach(group => group.appNames.forEach(name => grouped.add(name)))
 
-			const ungrouped = this.appList.filter(item => !grouped.has(item.name))
+			const ungrouped = this.appList.filter(item => !grouped.has(item.name) && !this.hiddenApps.includes(item.name))
 			const folderItems = this.groups.map(group => ({
 				__folder: true,
 				id: group.id,
 				name: group.name,
-				appNames: group.appNames,
+				appNames: group.appNames.filter(name => !this.hiddenApps.includes(name)),
 				color: group.color,
 				theme: group.theme
 			}))
