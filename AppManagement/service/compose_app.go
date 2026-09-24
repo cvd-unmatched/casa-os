@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -1103,7 +1104,7 @@ func NewComposeAppFromYAML(yaml []byte, skipInterpolation, skipValidation bool) 
 
 			// fix compose app name
 			logger.Info("compose app name is not specified, getting a name from one of our contributors :)")
-			projectName := random.Name(nil)
+			projectName := randomProjectName()
 			logger.Info("compose app name is given", zap.String("name", projectName))
 			o.SetProjectName(projectName, false)
 		},
@@ -1197,4 +1198,20 @@ func (a *ComposeApp) SetUncontrolled(uncontrolled bool) error {
 	}
 
 	return nil
+}
+
+// composeProjectNameRE is the shape compose requires of a project name.
+var composeProjectNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+
+// randomProjectName picks a random app name that compose will accept.
+// random.Name can produce accented names (happy_éric), which compose
+// rejects as a project name, so installing an unnamed app failed at random
+// depending on which name it drew.
+func randomProjectName() string {
+	for i := 0; i < 50; i++ {
+		if name := random.Name(nil); composeProjectNameRE.MatchString(name) {
+			return name
+		}
+	}
+	return fmt.Sprintf("app-%d", time.Now().Unix())
 }
