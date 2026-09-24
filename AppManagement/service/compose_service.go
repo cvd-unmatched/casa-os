@@ -115,7 +115,10 @@ func (s *ComposeService) Install(ctx context.Context, composeApp *ComposeApp) er
 		defer PublishEventWrapper(ctx, common.EventTypeAppInstallEnd, nil)
 
 		if err := composeApp.PullAndInstall(ctx); err != nil {
-			go PublishEventWrapper(ctx, common.EventTypeAppInstallError, map[string]string{
+			// not in a goroutine: the deferred install-end above fires right
+			// after this returns, and the UI needs to see the error first to
+			// know the run failed instead of treating the end as a success
+			PublishEventWrapper(ctx, common.EventTypeAppInstallError, map[string]string{
 				common.PropertyTypeMessage.Name: err.Error(),
 			})
 
