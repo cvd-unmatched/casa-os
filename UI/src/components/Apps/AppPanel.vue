@@ -9,6 +9,7 @@ import orderBy from 'lodash/orderBy'
 import debounce from 'lodash/debounce'
 import FileSaver from 'file-saver'
 import { ValidationObserver, ValidationProvider } from 'vee-validate'
+import { clearCustomInstallDraft, loadCustomInstallDraft, saveCustomInstallDraft } from '@/utils/customInstallDraft'
 import { parse } from 'yaml'
 import { vOnClickOutside } from '@vueuse/components'
 import AppTerminalPanel from './AppTerminalPanel.vue'
@@ -118,6 +119,7 @@ export default {
       errInfo: {},
       dockerComposeCommands: '',
       dockerComposeServiceName: '',
+      installEndTimer: null,
 
       pageIndex: 1,
       pageSize: 5,
@@ -223,6 +225,9 @@ export default {
     },
     showExportButton() {
       return this.currentSlide == 1 && this.state == 'update'
+    },
+    isCustomInstall() {
+      return this.state == 'install' && this.settingData != undefined
     },
     showTerminalButton() {
       return this.currentSlide == 1 && this.state == 'update' && this.runningStatus == 'running'
@@ -353,6 +358,9 @@ export default {
     if (this.settingData != undefined || this.settingComposeData != undefined) {
       this.isLoading = false
       this.dockerComposeConfig = this.settingComposeData
+      if (!this.dockerComposeConfig && this.isCustomInstall) {
+        this.restoreCustomInstallDraft()
+      }
       this.currentSlide = 1
     }
     else {
@@ -712,6 +720,27 @@ export default {
     },
 
     /**
+     * @description: Pick up a customized install from the values of the last
+     * attempt that failed, instead of starting blank
+     */
+    restoreCustomInstallDraft() {
+      const draft = loadCustomInstallDraft()
+      if (!draft) {
+        return
+      }
+      this.dockerComposeConfig = draft
+      this.$buefy.toast.open({
+        message: this.$t('Continuing from your last values'),
+        type: 'is-info',
+      })
+    },
+
+    startCustomInstall() {
+      this.restoreCustomInstallDraft()
+      this.currentSlide = 1
+    },
+
+    /**
      * @description: Validate form async
      * @param {object} ref ref of component
      * @return {boolean}
@@ -742,13 +771,16 @@ export default {
           }
         })
         .catch((e) => {
-          if (e.response.status === 400) {
+          if (e.response?.status === 400) {
             this.dockerComposeConfig = dockerComposeCommands
             this.currentSlide = 1
             this.errInfo = e.response.data.data
           }
+          // the response body is usually an object - showing it directly
+          // rendered as "[object Object]"
+          const body = e.response?.data
           this.$buefy.toast.open({
-            message: e.response.data || e.response.status,
+            message: (typeof body === 'string' ? body : body?.message) || e.message,
             type: 'is-danger',
           })
         })
@@ -1102,6 +1134,14 @@ export default {
           // v-if, and it initializes from this prop, not from
           // dockerComposeCommands (which only reflects live in-progress edits).
           this.dockerComposeConfig = this.dockerComposeCommands
+          // and keep a copy outside this panel too, for when it gets closed
+          // instead of going Back
+          if (this.isCustomInstall) {
+            saveCustomInstallDraft(this.dockerComposeCommands)
+          }
+          // install-end can arrive just before this error, so it may already
+          // have scheduled the panel to close
+          clearTimeout(this.installEndTimer)
         }
         if (resData.success) {
           this.currentInstallAppType = resData.type
@@ -1126,11 +1166,19 @@ export default {
         }
       }
       else {
-        localStorage.removeItem('app_data')
-        this.addIdToSessionStorage(resData.name)
-
-        setTimeout(() => {
+        // the backend publishes install-end after a failed install too, so
+        // only a run that ended without an error may close the panel -
+        // otherwise the form and the error vanish before the user can fix
+        // the mistake and retry
+        clearTimeout(this.installEndTimer)
+        this.installEndTimer = setTimeout(() => {
           this.$emit('updateState')
+          if (this.currentInstallAppError) {
+            return
+          }
+          localStorage.removeItem('app_data')
+          clearCustomInstallDraft()
+          this.addIdToSessionStorage(resData.name)
           this.$emit('close')
         }, 500)
       }
@@ -1151,12 +1199,17 @@ export default {
   destroyed() {
     window.addEventListener('resize', this.setCSSVHVar)
     clearInterval(this.timer)
+    clearTimeout(this.installEndTimer)
   },
 
   sockets: {
     'app:install-begin': function (res) {
       this.currentInstallAppName = res.Properties['app:name']
       this.currentSlide = 2
+      // a retry after a failed attempt starts clean
+      this.currentInstallAppError = false
+      this.totalPercentage = 0
+      clearTimeout(this.installEndTimer)
       this.currentInstallAppText = 'Start Installation...'
       this.cancelButtonText = 'Continue in background'
     },
@@ -1276,7 +1329,7 @@ export default {
             rounded
             size="is-small"
             type="is-primary"
-            @click="currentSlide = 1"
+            @click="startCustomInstall"
           />
 
           <b-tooltip v-if="showImportButton" :label="$t('Import')" position="is-bottom" type="is-dark">
