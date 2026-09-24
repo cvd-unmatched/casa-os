@@ -382,13 +382,19 @@ type AccessIPs struct {
 // addresses the kernel already has configured.
 func (c *systemService) GetAccessIPs() AccessIPs {
 	result := AccessIPs{}
-	for _, ipStr := range ip_helper.GetDeviceAllIPv4() {
+	for name, ipStr := range ip_helper.GetDeviceAllIPv4() {
 		ip := net2.ParseIP(ipStr)
 		if ip == nil {
 			continue
 		}
 		if ip_helper.IsTailscaleIP(ip) {
 			result.TailscaleIP = ipStr
+			continue
+		}
+		// docker0 and friends sort ahead of a real 192.168.x.x address, so
+		// without this the "local network IP" an app link uses was a
+		// container bridge address nothing else on the network can reach
+		if ip_helper.IsVirtualInterface(name) {
 			continue
 		}
 		result.LanIPs = append(result.LanIPs, ipStr)
