@@ -85,8 +85,8 @@ export default {
 	watch: {
 		isEditing(val) {
 			if (val) {
-				// editor is editable
-				this.controlEditorState = 'edit'
+				// editor is editable, with the rendered markdown alongside it
+				this.controlEditorState = 'editable'
 				this.icon = 'check-outline'
 			} else {
 				// editor is not editable
