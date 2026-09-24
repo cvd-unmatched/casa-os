@@ -30,3 +30,16 @@ func TestHasLocalIP(t *testing.T) {
 	fmt.Println("dddd")
 	fmt.Println(HasLocalIP(net.ParseIP("192.168.2.10")))
 }
+
+func TestIsVirtualInterface(t *testing.T) {
+	for _, name := range []string{"docker0", "br-3fa1c2d4e5f6", "veth1a2b3c", "virbr0", "cni0", "flannel.1"} {
+		if !IsVirtualInterface(name) {
+			t.Errorf("%s should be treated as a virtual interface", name)
+		}
+	}
+	for _, name := range []string{"eth0", "enp3s0", "wlan0", "eno1", "tailscale0", "bond0"} {
+		if IsVirtualInterface(name) {
+			t.Errorf("%s should not be treated as a virtual interface", name)
+		}
+	}
+}

@@ -28,10 +28,12 @@ export default {
 				return
 			this.mode = mode
 			this.saving = true
+			// invalidate once the save has landed, not right after sending it -
+			// anything resolving in between would re-cache the old preference
 			this.$api.users.setCustomStorage(OPEN_APP_HOST_PREFERENCE_KEY, { data: { mode } }).finally(() => {
 				this.saving = false
+				invalidateOpenAppHostCache()
 			})
-			invalidateOpenAppHostCache()
 		},
 	},
 }

@@ -94,6 +94,22 @@ func IsTailscaleIP(ip net.IP) bool {
 	return ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127
 }
 
+// virtualInterfacePrefixes name interfaces whose addresses only exist inside
+// this box (container bridges, VM networks, veth pairs) - no other device on
+// the network can reach the box there.
+var virtualInterfacePrefixes = []string{
+	"docker", "br-", "veth", "virbr", "lxcbr", "lxdbr", "cni", "flannel", "cali", "podman",
+}
+
+func IsVirtualInterface(name string) bool {
+	for _, prefix := range virtualInterfacePrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func HasLocalIP(ip net.IP) bool {
 	if ip.IsLoopback() {
 		return true
