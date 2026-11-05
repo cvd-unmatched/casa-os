@@ -40,6 +40,11 @@ type AutoUpdateAppStatus struct {
 	AutoUpdate      bool   `json:"autoUpdate"`
 	Notify          bool   `json:"notify"`
 	IsUncontrolled  bool   `json:"isUncontrolled"`
+	// CheckError is why this app's latest check produced no newest tag, in
+	// words a user can act on (a rejected registry login above all). Empty
+	// when the check worked, including when it worked and found no version
+	// tags, which is a different thing from failing to look.
+	CheckError string `json:"checkError,omitempty"`
 }
 
 var (
@@ -349,6 +354,7 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 	}
 	newImageByService := map[string]string{}
 	anyCheckSucceeded := false
+	firstFailure := ""
 
 	for _, svc := range app.Services {
 		img, currentTag := docker.ExtractImageAndTag(svc.Image)
@@ -363,8 +369,11 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 		// semver-based auto-update deliberately manages these apps anyway -
 		// a different, tag-driven axis of "controlled" than the store's own
 		// catalog-alignment check.
-		newTag, ok := checkNewestTag(ctx, svc.Image, currentTag)
+		newTag, ok, failure := checkNewestTag(ctx, svc.Image, currentTag)
 		if !ok {
+			if firstFailure == "" {
+				firstFailure = failure
+			}
 			continue
 		}
 		anyCheckSucceeded = true
@@ -389,6 +398,7 @@ func checkComposeAppForUpdates(ctx context.Context, app *ComposeApp, cfg *autoup
 	}
 
 	if !anyCheckSucceeded {
+		row.CheckError = firstFailure
 		row = carryForwardKnownUpdate(row)
 	}
 
@@ -544,8 +554,9 @@ func checkStandaloneAppForUpdates(ctx context.Context, app model.MyAppList, cfg 
 		IsUncontrolled: app.IsUncontrolled,
 	}
 
-	newTag, ok := checkNewestTag(ctx, app.Image, currentTag)
+	newTag, ok, failure := checkNewestTag(ctx, app.Image, currentTag)
 	if !ok {
+		row.CheckError = failure
 		return carryForwardKnownUpdate(row)
 	}
 	row.LatestKnownTag = newTag
@@ -598,7 +609,10 @@ func applyStandaloneAppUpdate(ctx context.Context, containerID, newImage string)
 	return MyService.Compose().Install(ctx, composeApp)
 }
 
-func checkNewestTag(ctx context.Context, image, currentTag string) (string, bool) {
+// checkNewestTag returns the newest comparable registry tag. When there is
+// none it also says why, so the panel can tell a rejected registry login
+// apart from an image that simply has no version-numbered tags.
+func checkNewestTag(ctx context.Context, image, currentTag string) (string, bool, string) {
 	currentVersion, err := semver.NewVersion(currentTag)
 	if err != nil {
 		// the currently pinned tag isn't a version at all (latest, main, a
@@ -608,16 +622,39 @@ func checkNewestTag(ctx context.Context, image, currentTag string) (string, bool
 		// tag still sitting in the registry's tag list and could get
 		// "newer" reported for a tag that's actually years old (confirmed:
 		// this reported Home Assistant's 2024.4.4 as newer than :latest).
-		return "", false
+		return "", false, fmt.Sprintf("%q is not a version number, so there is nothing to compare against", currentTag)
 	}
 
 	tags, err := docker.GetTags(ctx, image)
 	if err != nil {
 		logger.Error("autoupdate: failed to list registry tags", zap.Error(err), zap.String("image", image))
-		return "", false
+		return "", false, describeTagCheckError(image, err)
 	}
 
-	return autoupdate.NewestTag(tags, currentVersion.Prerelease() != "")
+	newest, ok := autoupdate.NewestTag(tags, currentVersion.Prerelease() != "")
+	if !ok {
+		return "", false, "the registry has no version-numbered tags for this image"
+	}
+	return newest, true, ""
+}
+
+// describeTagCheckError turns a failed tag listing into something a user can
+// act on. A revoked or stale registry token is by far the likeliest cause for
+// a private image, and it used to be swallowed into the same "no comparable
+// version tags found" as an image that genuinely has none.
+func describeTagCheckError(image string, err error) string {
+	host, hostErr := docker.ParseServerAddress(image)
+	if hostErr != nil || host == "" {
+		host = "the registry"
+	}
+	msg := err.Error()
+	lower := strings.ToLower(msg)
+	if strings.Contains(msg, "401 Unauthorized") || strings.Contains(msg, "403 Forbidden") ||
+		strings.Contains(lower, "unauthorized") || strings.Contains(lower, "denied") ||
+		strings.Contains(lower, "no credentials available") {
+		return fmt.Sprintf("%s rejected the login. Run docker login %s on this server with a token that can read packages", host, host)
+	}
+	return fmt.Sprintf("could not list tags from %s: %s", host, msg)
 }
 
 // firstAutoUpdateAttempt reports whether this is the first time this cron

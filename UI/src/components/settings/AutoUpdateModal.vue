@@ -120,9 +120,12 @@ export default {
 						<template v-else-if="app.latestKnownTag">
 							{{ $t('Up to date') }} ({{ app.currentTag }})
 						</template>
-						<template v-else>
+						<template v-else-if="!app.checkError">
 							{{ app.currentTag }} - {{ $t('no comparable version tags found') }}
 						</template>
+					</div>
+					<div v-if="app.checkError" class="is-size-7 has-text-danger mt-1">
+						{{ app.currentTag }} - {{ app.checkError }}
 					</div>
 				</div>
 			</template>
