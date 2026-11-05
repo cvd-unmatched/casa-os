@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/IceWhaleTech/CasaOS-AppManagement/common"
@@ -221,6 +222,50 @@ const pacingDelay = 2500 * time.Millisecond
 // Called once per cron tick from main.go in place of the old,
 // catalog-only checkImageUpdates.
 func CheckAndApplyAutoUpdates(ctx context.Context) {
+	if !autoUpdateRunning.CompareAndSwap(false, true) {
+		logger.Info("autoupdate: a run is already in progress, skipping this one")
+		return
+	}
+	defer autoUpdateRunning.Store(false)
+
+	checkAndApplyAutoUpdates(ctx)
+}
+
+// autoUpdateRunning is true while a full pass is underway, from the hourly
+// cron or a manual run. A pass takes minutes (pacingDelay between registry
+// calls), so a second one starting on top of it would pull and recreate the
+// same containers twice.
+var autoUpdateRunning atomic.Bool
+
+// AutoUpdateRunning reports whether a full check-and-update pass is underway.
+func AutoUpdateRunning() bool {
+	return autoUpdateRunning.Load()
+}
+
+// StartAutoUpdateRun starts a full check-and-update pass in the background,
+// the same one the hourly cron runs, and reports false if one is already
+// going. It outlives the request that asked for it, so it gets its own
+// context and its own panic guard: an unrecovered panic in a goroutine takes
+// down the whole service.
+func StartAutoUpdateRun() bool {
+	if !autoUpdateRunning.CompareAndSwap(false, true) {
+		return false
+	}
+
+	go func() {
+		defer autoUpdateRunning.Store(false)
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("autoupdate: manual run panicked", zap.Any("panic", r), zap.String("stack", string(debug.Stack())))
+			}
+		}()
+		checkAndApplyAutoUpdates(context.Background())
+	}()
+
+	return true
+}
+
+func checkAndApplyAutoUpdates(ctx context.Context) {
 	cfg, err := autoupdate.Load()
 	if err != nil {
 		logger.Error("autoupdate: failed to load config", zap.Error(err))

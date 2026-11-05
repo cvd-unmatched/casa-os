@@ -81,3 +81,32 @@ func RecheckApp(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusOK, modelCommon.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: status})
 }
+
+// @Summary check every app now and apply the update for each one with auto-update on
+// @Produce  application/json
+// @Tags autoupdate
+// @Security ApiKeyAuth
+// @Success 202 {string} string "started"
+// @Failure 409 {string} string "a run is already in progress"
+// @Router /autoupdate/run [post]
+func RunAutoUpdate(ctx echo.Context) error {
+	if !service.StartAutoUpdateRun() {
+		return ctx.JSON(http.StatusConflict, modelCommon.Result{Success: common_err.SERVICE_ERROR, Message: "an update run is already in progress"})
+	}
+
+	return ctx.JSON(http.StatusAccepted, modelCommon.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
+}
+
+// @Summary whether a check-and-update run is in progress
+// @Produce  application/json
+// @Tags autoupdate
+// @Security ApiKeyAuth
+// @Success 200 {string} string "ok"
+// @Router /autoupdate/run [get]
+func GetAutoUpdateRun(ctx echo.Context) error {
+	return ctx.JSON(http.StatusOK, modelCommon.Result{
+		Success: common_err.SUCCESS,
+		Message: common_err.GetMsg(common_err.SUCCESS),
+		Data:    map[string]bool{"running": service.AutoUpdateRunning()},
+	})
+}

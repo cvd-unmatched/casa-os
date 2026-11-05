@@ -7,9 +7,13 @@ export default {
 			apps: [],
 			rechecking: null,
 			search: '',
+			runningAll: false,
 		}
 	},
 	computed: {
+		autoUpdateCount() {
+			return this.apps.filter(app => app.autoUpdate).length
+		},
 		visibleApps() {
 			const query = this.search.trim().toLowerCase()
 			const filtered = query
@@ -20,6 +24,14 @@ export default {
 	},
 	created() {
 		this.load()
+		// pick up a pass that was already running when the panel opened
+		this.$api.autoupdate.runStatus().then((res) => {
+			if (res.data.data.running)
+				this.watchRun()
+		}).catch(() => {})
+	},
+	beforeDestroy() {
+		clearInterval(this.runTimer)
 	},
 	methods: {
 		async load() {
@@ -46,6 +58,53 @@ export default {
 				Object.assign(app, previous)
 				this.$buefy.toast.open({ message: this.$t('Could not save settings for {name}.', { name: app.name }), type: 'is-danger' })
 			}
+		},
+
+		confirmRunAll() {
+			this.$buefy.dialog.confirm({
+				message: this.$t('This checks every app now and updates the {count} with Auto-update on. Those containers will restart, and it can take a few minutes.', { count: this.autoUpdateCount }),
+				confirmText: this.$t('Check and update'),
+				cancelText: this.$t('Cancel'),
+				onConfirm: () => this.runAll(),
+			})
+		},
+
+		async runAll() {
+			try {
+				await this.$api.autoupdate.runAll()
+			}
+			catch (error) {
+				if (error.response?.status !== 409) {
+					this.$buefy.toast.open({ message: this.$t('Could not start the update check.'), type: 'is-danger' })
+					return
+				}
+				// 409: a pass is already going - just follow it
+			}
+			this.watchRun()
+		},
+
+		// follow a pass in progress: refresh the rows as it goes (each app's
+		// status is updated as soon as it has been checked) and say when done
+		watchRun() {
+			this.runningAll = true
+			clearInterval(this.runTimer)
+			this.runTimer = setInterval(async () => {
+				try {
+					const res = await this.$api.autoupdate.runStatus()
+					const running = res.data.data.running
+					const list = await this.$api.autoupdate.listApps()
+					this.apps = list.data.data || []
+					if (!running) {
+						clearInterval(this.runTimer)
+						this.runningAll = false
+						this.$buefy.toast.open({ message: this.$t('Finished checking and updating your apps.'), type: 'is-success' })
+					}
+				}
+				catch (error) {
+					clearInterval(this.runTimer)
+					this.runningAll = false
+				}
+			}, 4000)
 		},
 
 		async recheck(app) {
@@ -78,10 +137,18 @@ export default {
 				{{ $t('Checks each app\'s image against its registry for a newer version. Notify and Auto-update are independent - nothing auto-updates unless you check that box, and you can leave notifications on or off separately.') }}
 			</p>
 
-			<b-input
-				v-if="apps.length > 0" v-model="search" :placeholder="$t('Search apps…')"
-				icon="magnify" class="mb-4" size="is-small" expanded
-			/>
+			<div v-if="apps.length > 0" class="is-flex is-align-items-center mb-4">
+				<b-input
+					v-model="search" :placeholder="$t('Search apps…')"
+					icon="magnify" class="is-flex-grow-1 mr-3" size="is-small" expanded
+				/>
+				<b-button
+					size="is-small" rounded type="is-primary" icon-pack="casa" icon-left="restart-outline"
+					:loading="runningAll" :disabled="runningAll" @click="confirmRunAll"
+				>
+					{{ runningAll ? $t('Checking…') : $t('Check and update all') }}
+				</b-button>
+			</div>
 
 			<b-loading v-model="isLoading" :is-full-page="false" />
 

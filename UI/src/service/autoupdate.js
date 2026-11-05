@@ -18,6 +18,18 @@ const autoupdate = {
 	recheck(name) {
 		return api.post(`${PREFIX}/apps/${name}/recheck`)
 	},
+
+	// check every app now and apply the update for each one with auto-update
+	// on - the same pass the hourly job runs. Returns right away (202); 409
+	// means a pass is already running
+	runAll() {
+		return api.post(`${PREFIX}/run`)
+	},
+
+	// { running: bool } - whether such a pass is in progress
+	runStatus() {
+		return api.get(`${PREFIX}/run`)
+	},
 }
 
 export default autoupdate

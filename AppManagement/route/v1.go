@@ -99,6 +99,8 @@ func InitV1Router() http.Handler {
 			v1AutoUpdateGroup.GET("/apps", v1.ListAutoUpdateStatus)
 			v1AutoUpdateGroup.PUT("/apps/:name/settings", v1.SetAutoUpdateSettings)
 			v1AutoUpdateGroup.POST("/apps/:name/recheck", v1.RecheckApp)
+			v1AutoUpdateGroup.POST("/run", v1.RunAutoUpdate)
+			v1AutoUpdateGroup.GET("/run", v1.GetAutoUpdateRun)
 		}
 
 		v1BackupGroup := v1Group.Group("/backup")

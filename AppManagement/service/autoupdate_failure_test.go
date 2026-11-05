@@ -28,3 +28,17 @@ func TestDescribeTagCheckError(t *testing.T) {
 		t.Errorf("a network error must not tell the user to log in again: %q", got)
 	}
 }
+
+func TestAutoUpdateRunGuard(t *testing.T) {
+	if !autoUpdateRunning.CompareAndSwap(false, true) {
+		t.Fatal("expected no run in progress at the start of the test")
+	}
+	defer autoUpdateRunning.Store(false)
+
+	if !AutoUpdateRunning() {
+		t.Error("AutoUpdateRunning should report the run in progress")
+	}
+	if StartAutoUpdateRun() {
+		t.Error("a second run must not start while one is in progress")
+	}
+}
