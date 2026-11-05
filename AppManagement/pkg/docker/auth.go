@@ -102,6 +102,15 @@ func GetBearerHeader(challenge string, img string, registryAuth string) (string,
 	}
 	defer authResponse.Body.Close()
 
+	// A refused login (a revoked or stale token) answers with an error body
+	// and a 4xx status, no token. Reading that as a successful response
+	// produced an empty "Bearer " header, so every later request failed with
+	// a bare 403 and the real reason - the registry refusing the credentials
+	// - was lost.
+	if authResponse.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("registry token endpoint refused the request: %s", authResponse.Status)
+	}
+
 	tokenResponse := &TokenResponse{}
 
 	body, err := io.ReadAll(authResponse.Body)

@@ -72,6 +72,15 @@ func GetTags(ctx context.Context, imageName string) ([]string, error) {
 	}
 
 	token, err := GetToken(challenge, registryAuth, imageName)
+	if err != nil && registryAuth != "" {
+		// A stale or revoked stored login makes registries like ghcr.io
+		// refuse even public images, which they serve to anyone without a
+		// login. Try again anonymously: public images keep working, and a
+		// private one still fails below with the registry's own answer.
+		if anonymous, anonErr := GetToken(challenge, "", imageName); anonErr == nil {
+			token, err = anonymous, nil
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
