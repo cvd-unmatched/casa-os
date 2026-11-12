@@ -24,6 +24,7 @@ require (
 	github.com/h2non/filetype v1.1.3
 	github.com/hirochachacha/go-smb2 v1.1.0
 	github.com/json-iterator/go v1.1.12
+	github.com/labstack/echo-jwt/v4 v4.4.0
 	github.com/labstack/echo/v4 v4.16.1
 	github.com/maruel/natural v1.1.0
 	github.com/mholt/archiver/v3 v3.5.1
@@ -80,7 +81,6 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/klauspost/pgzip v1.2.5 // indirect
-	github.com/labstack/echo-jwt/v4 v4.2.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20230110061619-bbe2e5e100de // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
