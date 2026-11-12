@@ -10,6 +10,7 @@ import (
 	"github.com/IceWhaleTech/CasaOS/common"
 	"github.com/IceWhaleTech/CasaOS/pkg/config"
 	v1 "github.com/IceWhaleTech/CasaOS/route/v1"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	echo_middleware "github.com/labstack/echo/v4/middleware"
 )
@@ -40,9 +41,9 @@ func InitV1Router() http.Handler {
 	e.GET("/v1/custom-icons", v1.GetCustomIcon)
 	v1Group := e.Group("/v1")
 	//	e.Any("/v1/test", v1.CheckNetwork)
-	v1Group.Use(echo_middleware.JWTWithConfig(echo_middleware.JWTConfig{
+	v1Group.Use(echojwt.WithConfig(echojwt.Config{
 		Skipper: isLoopbackRequest,
-		ParseTokenFunc: func(token string, c echo.Context) (interface{}, error) {
+		ParseTokenFunc: func(c echo.Context, token string) (interface{}, error) {
 			valid, claims, err := jwt.Validate(token, func() (*ecdsa.PublicKey, error) { return external.GetPublicKey(config.CommonInfo.RuntimePath) })
 			if err != nil || !valid {
 				return nil, echo.ErrUnauthorized
